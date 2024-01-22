@@ -1,36 +1,14 @@
 const std = @import("std");
-const token = @import("token.zig");
 const lexer = @import("lexer.zig");
+const parser = @import("parser.zig");
 
 pub fn main() !void {
-    std.log.info("Hello, world!", .{});
-    const input = "=+(){},#";
-    const tests = [_]token.Token{
-        token.Token.equal,
-        token.Token.plus,
-        token.Token.left_paren,
-        token.Token.right_paren,
-        token.Token.comma,
-        token.Token.sharp,
-    };
+    const input = "select distinct hello.*, [hello] as tester from users";
 
     var l = lexer.Lexer.new(input);
-
-    var current_line: u64 = 0;
-    var current_col: u64 = 0;
-    for (0..tests.len) |i| {
-        const tok = l.next_token();
-        // if (tok == token.Token.new_line) {
-        //     current_line += 1;
-        //     current_col = 0;
-        // }
-        var location = token.Location{ .col = current_col, .line = current_line };
-        var token_with_location = token.TokenWithLocation{ .token = tok, .location = location };
-        _ = token_with_location;
-        const test_token = tests[i];
-        _ = test_token;
-
-        current_col += 1;
-        std.log.debug("Current column: {}", .{current_col});
-    }
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
+    defer std.debug.assert(gpa.deinit() == .ok);
+    var sql_parser = parser.Parser.init(allocator, l);
+    try sql_parser.parse();
 }

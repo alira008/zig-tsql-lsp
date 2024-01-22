@@ -52,7 +52,7 @@ pub const Lexer = struct {
             self.char = self.input[self.read_position];
             if (self.char == '\n') {
                 self.line += 1;
-                self.column = 0;
+                self.column = 1;
             } else {
                 self.column += 1;
             }
@@ -83,11 +83,16 @@ pub const Lexer = struct {
     }
 
     fn read_quoted_literal(self: *Self, quote_char: u8) []const u8 {
+        // skip the quote character
+        self.read_char();
         const position = self.position;
 
         while (self.char != quote_char and self.peak_char() != quote_char) {
             self.read_char();
         }
+
+        // skip the quote character
+        self.read_char();
 
         return self.input[position..self.position];
     }
