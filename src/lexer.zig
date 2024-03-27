@@ -26,7 +26,7 @@ pub const Lexer = struct {
         return .{ .line = self.line, .column = self.column };
     }
 
-    fn peak_char(self: *Self) u8 {
+    fn peek_char(self: *Self) u8 {
         // check to see if we have reached end of input
         if (self.read_position >= self.input.len) {
             return 0;
@@ -65,46 +65,67 @@ pub const Lexer = struct {
     fn read_identifier(self: *Self) []const u8 {
         const position = self.position;
 
-        while (is_letter(self.char)) {
+        while (is_letter(self.peek_char()) and self.peek_char() != 0) {
             self.read_char();
         }
 
-        return self.input[position..self.position];
+        return self.input[position .. self.position + 1];
     }
 
     fn read_number(self: *Self) []const u8 {
         const position = self.position;
 
-        while (is_float(self.char)) {
+        while (std.ascii.isDigit(self.peek_char()) and self.peek_char() != 0) {
             self.read_char();
         }
+
+        // check if we have a float
+        // if we have a period, we have a float
+        if (self.peek_char() == '.') {
+            self.read_char();
+            while (std.ascii.isDigit(self.peek_char()) and self.peek_char() != 0) {
+                self.read_char();
+            }
+        }
+
+        return self.input[position .. self.position + 1];
+    }
+
+    fn read_quoted_identifier(self: *Self) []const u8 {
+        // skip the quote character
+        self.read_char();
+        const position = self.position;
+        while (self.peek_char() != ']' and self.peek_char() != 0) {
+            self.read_char();
+        }
+        // skip the quote character
+        self.read_char();
+        return self.input[position..self.position];
+    }
+
+    fn read_string_literal(self: *Self) []const u8 {
+        // skip the quote character
+        self.read_char();
+        const position = self.position;
+        while (self.peek_char() != '\'' and self.peek_char() != 0) {
+            self.read_char();
+        }
+
+        // skip the quote character
+        self.read_char();
 
         return self.input[position..self.position];
     }
 
-    fn read_quoted_literal(self: *Self, quote_char: u8) []const u8 {
-        // skip the quote character
+    fn read_local_variable(self: *Self) []const u8 {
+        // skip the @ character
         self.read_char();
         const position = self.position;
-
-        while (self.char != quote_char and self.peak_char() != quote_char) {
+        while (is_letter(self.peek_char()) and self.peek_char() != 0) {
             self.read_char();
         }
 
-        // skip the quote character
-        self.read_char();
-
-        return self.input[position..self.position];
-    }
-
-    fn read_alias(self: *Self) []const u8 {
-        const position = self.position;
-
-        while (self.char != ']') {
-            self.read_char();
-        }
-
-        return self.input[position..self.position];
+        return self.input[position .. self.position + 1];
     }
 
     fn skip_whitespace(self: *Self) void {
@@ -124,30 +145,34 @@ pub const Lexer = struct {
             ')' => token.Token.right_paren,
             '+' => token.Token.plus,
             '-' => token.Token.minus,
-            '\'' => {
-                const word = self.read_quoted_literal('\'');
+            '\'' => blk: {
+                const word = self.read_string_literal();
                 // read closing '\''
                 self.read_char();
 
-                return .{ .quoted_literal = .{ .value = word, .quote_char = '\'' } };
+                break :blk .{ .string_literal = word };
             },
-            '[' => {
-                const word = self.read_quoted_literal(']');
+            '[' => blk: {
+                const word = self.read_quoted_identifier();
                 // read closing ']'
                 self.read_char();
 
-                return .{ .quoted_literal = .{ .value = word, .quote_char = '[' } };
+                break :blk .{ .quoted_identifier = word };
+            },
+            '@' => blk: {
+                const word = self.read_local_variable();
+                break :blk .{ .local_variable = word };
             },
             ',' => token.Token.comma,
             '<' => blk: {
-                if (self.peak_char() == '=') {
+                if (self.peek_char() == '=') {
                     break :blk token.Token.less_than_equal;
                 } else {
                     break :blk token.Token.less_than;
                 }
             },
             '>' => blk: {
-                if (self.peak_char() == '=') {
+                if (self.peek_char() == '=') {
                     break :blk token.Token.greater_than_equal;
                 } else {
                     break :blk token.Token.greater_than;
@@ -156,37 +181,24 @@ pub const Lexer = struct {
             '=' => token.Token.equal,
             '*' => token.Token.asterisk,
             '!' => blk: {
-                if (self.peak_char() == '=') {
+                if (self.peek_char() == '=') {
                     break :blk token.Token.not_equal;
                 } else {
                     break :blk token.Token.illegal;
                 }
             },
-            'a'...'z', 'A'...'Z', '_' => {
+            'a'...'z', 'A'...'Z', '_' => blk: {
                 const ident = self.read_identifier();
                 if (token.Token.keyword(ident)) |tok| {
-                    return tok;
+                    break :blk tok;
                 }
-                return .{ .identifier = ident };
+                break :blk .{ .identifier = ident };
             },
-            '0'...'9' => {
+            '0'...'9' => blk: {
                 const num_str = self.read_number();
-                var number_of_periods: u16 = 0;
-                for (num_str) |c| {
-                    if (c == '.') {
-                        number_of_periods += 1;
-                    }
-                }
 
-                if (number_of_periods == 0) {
-                    const number = std.fmt.parseInt(i32, num_str, 10) catch return token.Token.illegal;
-                    return .{ .integer = number };
-                } else if (number_of_periods == 1) {
-                    const number = std.fmt.parseFloat(f64, num_str) catch return token.Token.illegal;
-                    return .{ .float = number };
-                }
-
-                return token.Token.illegal;
+                const number = std.fmt.parseFloat(f64, num_str) catch return token.Token.illegal;
+                break :blk .{ .number = number };
             },
             0 => token.Token.eof,
             else => token.Token.illegal,
@@ -198,18 +210,43 @@ pub const Lexer = struct {
     }
 };
 
-test "next token function" {
-    const input = "=+(),# 4.2 4";
-    const tests = [_]token.Token{ token.Token.equal, token.Token.plus, token.Token.left_paren, token.Token.right_paren, token.Token.comma, token.Token.sharp, token.Token{ .float = 4.2 }, token.Token{ .integer = 4 } };
+test "basic select test" {
+    const input = "seLECt * from table;";
+    const tests = [_]token.Token{
+        token.Token.select,
+        token.Token.asterisk,
+        token.Token.from,
+        token.Token{ .identifier = "table" },
+    };
 
     var lexer = Lexer.new(input);
 
+    // std.debug.print("\n", .{});
     for (0..tests.len) |i| {
-        const location = lexer.location();
+        // const location = lexer.location();
         const tok = lexer.next_token();
         const test_token = tests[i];
 
-        std.debug.print("Location {}\n", .{location});
+        // std.debug.print("Location {}\n", .{location});
+        // std.debug.print("Token: {s}\n", .{tok.to_string()});
+        try expectEqualDeep(test_token, tok);
+    }
+}
+
+test "general lex test" {
+    const input = "=+(),# 4.2 4 exec from hello @yes [yessir] 'noo'";
+    const tests = [_]token.Token{ token.Token.equal, token.Token.plus, token.Token.left_paren, token.Token.right_paren, token.Token.comma, token.Token.sharp, token.Token{ .number = 4.2 }, token.Token{ .number = 4 }, token.Token.exec, token.Token.from, token.Token{ .identifier = "hello" }, token.Token{ .local_variable = "yes" }, token.Token{ .quoted_identifier = "yessir" }, token.Token{ .string_literal = "noo" } };
+
+    var lexer = Lexer.new(input);
+
+    // std.debug.print("\n", .{});
+    for (0..tests.len) |i| {
+        // const location = lexer.location();
+        const tok = lexer.next_token();
+        const test_token = tests[i];
+
+        // std.debug.print("Location {}\n", .{location});
+        // std.debug.print("Token: {s}\n", .{tok.to_string()});
         try expectEqualDeep(test_token, tok);
     }
 }

@@ -1,10 +1,15 @@
 const std = @import("std");
 const token = @import("../token.zig");
+const ast = @import("./ast.zig");
 
-pub const Statement = union(enum) { select: SelectStatement };
+pub const SelectStatement = struct {
+    common_table_expression: ?CommonTableExpression,
+    body: SelectBody,
+};
 
-pub const SelectStatement = struct { distinct: bool = false, columns: std.ArrayList(Expression) = undefined };
-
-pub const SelectItem = union(enum) { wildcard, unnamed, with_alias, wildcard_with_alias };
-
-pub const Expression = union(enum) { literal: token.TokenWithLocation, compound_literal: std.ArrayList(token.TokenWithLocation), binary: struct { left: *Expression, operator: token.TokenWithLocation, right: *Expression }, unary, function_call };
+pub const CommonTableExpression = struct {};
+pub const SelectBody = struct {
+    select_items: []*ast.Expression,
+    table: *ast.Expression,
+    where: ?ast.Expression,
+};

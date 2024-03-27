@@ -2,12 +2,13 @@ const lex = @import("lexer.zig");
 const token = @import("token.zig");
 const std = @import("std");
 const query = @import("ast/query.zig");
+const ast = @import("ast/ast.zig");
 
 pub const Parser = struct {
     allocator: std.mem.Allocator,
     lexer: lex.Lexer,
-    current_token: token.TokenWithLocation,
-    peek_token: token.TokenWithLocation,
+    current_token: token.Token,
+    peek_token: token.Token,
 
     pub fn init(allocator: std.mem.Allocator, lexer: lex.Lexer) Parser {
         var parser = Parser{
@@ -23,24 +24,9 @@ pub const Parser = struct {
         return parser;
     }
 
-    fn next_token(self: *Parser) void {
-        self.current_token = self.peek_token;
-        const location = self.lexer.location();
-        self.peek_token = .{ .token = self.lexer.next_token(), .location = location };
-    }
-
-    fn peek_token_is(self: *Parser, expected: token.TokenKind) bool {
-        return @as(token.TokenKind, self.peek_token.token) == expected;
-    }
-
-    fn current_token_is(self: *Parser, expected: token.TokenKind) bool {
-        return @as(token.TokenKind, self.current_token.token) == expected;
-    }
-
-    pub fn parse(self: *Parser) !void {
-        var list = std.ArrayList(query.Statement).init(self.allocator);
-        defer list.deinit();
-        while (self.current_token.token != .eof) {
+    pub fn parse(self: *Parser) !ast.Sql {
+        var list = std.ArrayList(ast.Statement).init(self.allocator);
+        while (self.current_token != .eof) {
             const statement = self.parse_statement() catch |err| {
                 std.debug.print("failed to parse statement\n", .{});
                 std.debug.print("error: {}\n", .{err});
@@ -48,41 +34,108 @@ pub const Parser = struct {
                 continue;
             };
             list.append(statement) catch {
-                std.debug.print("failed to append\n", .{});
+                std.debug.print("failed to append statement to list\n", .{});
             };
+
             self.next_token();
+        }
+        return ast.Sql{ .statements = try list.toOwnedSlice() };
+    }
+
+    const ParserError = error{ InvalidToken, NotImplemented, OutOfMemory };
+
+    fn peek_precedence(self: *Parser) u8 {
+        return switch (self.peek_token.token) {
+            .plus => 1,
+            else => 0,
+        };
+    }
+
+    fn next_token(self: *Parser) void {
+        self.current_token = self.peek_token;
+        self.peek_token = self.lexer.next_token();
+    }
+
+    fn peek_token_is(self: *Parser, expected: token.TokenKind) bool {
+        return @as(token.TokenKind, self.peek_token) == expected;
+    }
+
+    fn current_token_is(self: *Parser, expected: token.TokenKind) bool {
+        return @as(token.TokenKind, self.current_token) == expected;
+    }
+
+    fn expect_peek(self: *Parser, expected: token.TokenKind) bool {
+        if (self.peek_token_is(expected)) {
+            self.next_token();
+            return true;
+        } else {
+            return false;
         }
     }
 
-    fn parse_statement(self: *Parser) ParserError!query.Statement {
-        return switch (self.current_token.token) {
+    fn expect_peek_many(self: *Parser, expected: []const token.TokenKind) bool {
+        for (expected) |expected_token| {
+            if (self.peek_token_is(expected_token)) {
+                self.next_token();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    fn parse_statement(self: *Parser) ParserError!ast.Statement {
+        std.debug.print("parsing statement\n", .{});
+        std.debug.print("current token: {s}\n", .{self.current_token.to_string()});
+        return switch (self.current_token) {
+            .with => blk: {
+                const select_statement = try self.parse_cte();
+                break :blk ast.Statement{ .select = select_statement };
+            },
             .select => blk: {
-                const select_statement = try self.parse_select();
-                break :blk query.Statement{ .select = select_statement };
+                const select_body = try self.parse_select_body();
+                break :blk ast.Statement{ .select = query.SelectStatement{ .common_table_expression = null, .body = select_body } };
             },
             else => ParserError.NotImplemented,
         };
     }
 
-    fn parse_select(self: *Parser) ParserError!query.SelectStatement {
+    fn parse_cte(self: *Parser) ParserError!query.SelectStatement {
+        var statement = query.SelectStatement{ .common_table_expression = null, .body = undefined };
         std.debug.print("parsing select\n", .{});
-        var statement = query.SelectStatement{};
-
-        if (self.peek_token_is(.distinct)) {
-            self.next_token();
-            statement.distinct = true;
+        if (self.current_token_is(.with)) {
+            std.debug.print("parsing cte\n", .{});
         }
 
-        self.next_token();
-        var expression = try self.parse_expression(0);
-        var columns = std.ArrayList(query.Expression).init(self.allocator);
-        statement.columns = columns;
-        std.debug.print("expression: {}\n", .{expression});
+        if (!self.peek_token_is(.select)) {
+            return ParserError.InvalidToken;
+        }
+
+        std.debug.print("parsing select body\n", .{});
+        statement.body = try self.parse_select_body();
 
         return statement;
     }
 
-    fn parse_expression(self: *Parser, precedence: u8) ParserError!query.Expression {
+    fn parse_select_body(self: *Parser) ParserError!query.SelectBody {
+        std.debug.print("parsing select body\n", .{});
+        var body = query.SelectBody{
+            .select_items = undefined,
+            .table = undefined,
+            .where = undefined,
+        };
+
+        // parse the columns
+        if (!self.expect_peek_many(&[_]token.TokenKind{ .identifier, .string_literal })) {
+            return ParserError.InvalidToken;
+        }
+
+        if (!self.expect_peek(.from)) {
+            return ParserError.InvalidToken;
+        }
+        return body;
+    }
+
+    fn parse_expression(self: *Parser, precedence: u8) ParserError!ast.Expression {
         // check if the current token is an identifier
         // or if it is a prefix operator
         var left_expression = try self.parse_prefix_expression();
@@ -97,36 +150,30 @@ pub const Parser = struct {
         return left_expression;
     }
 
-    fn parse_prefix_expression(self: *Parser) ParserError!query.Expression {
-        return switch (self.current_token.token) {
-            .identifier, .float, .integer, .asterisk => expr: {
-                if (self.peek_token_is(.period)) {
-                    var idents = std.ArrayList(token.TokenWithLocation).init(self.allocator);
-                    defer idents.deinit();
-                    std.debug.print("parsing compound literal\n", .{});
-                    while (self.peek_token_is(.period)) {
-                        // skip to the dot
-                        self.next_token();
-
-                        if (!self.peek_token_is(.identifier) and !self.peek_token_is(.asterisk)) {
-                            return ParserError.InvalidToken;
-                        }
-                        self.next_token();
-
-                        idents.append(self.current_token) catch return ParserError.OutOfMemory;
-                    }
-                    break :expr query.Expression{ .compound_literal = idents };
-                } else {
-                    break :expr query.Expression{ .literal = self.current_token };
+    fn parse_prefix_expression(self: *Parser) ParserError!ast.Expression {
+        return switch (self.current_token) {
+            .identifier, .number, .local_variable, .string_literal, .quoted_identifier => expr: {
+                if (self.current_token == .identifier) {
+                    break :expr ast.Expression{ .identifier = self.current_token };
+                } else if (self.current_token == .number) {
+                    break :expr ast.Expression{ .literal = self.current_token };
+                } else if (self.current_token == .local_variable) {
+                    break :expr ast.Expression{ .local_variable = self.current_token };
+                } else if (self.current_token == .string_literal) {
+                    break :expr ast.Expression{ .literal = self.current_token };
+                } else if (self.current_token == .quoted_identifier) {
+                    break :expr ast.Expression{ .quoted_identifier = self.current_token };
                 }
+
+                return ParserError.InvalidToken;
             },
-            else => query.Expression{ .literal = self.current_token },
+            else => ParserError.InvalidToken,
         };
     }
 
-    fn parse_infix_expression(self: *Parser, left: query.Expression) ParserError!query.Expression {
+    fn parse_infix_expression(self: *Parser, left: query.Expression) ParserError!ast.Expression {
         _ = left;
-        return switch (self.current_token.token) {
+        return switch (self.current_token) {
             // .plus, .minus => expr: {
             //     const operator = self.current_token;
             //     // const precedence = self.current_precedence();
@@ -145,13 +192,25 @@ pub const Parser = struct {
             else => ParserError.InvalidToken,
         };
     }
-
-    fn peek_precedence(self: *Parser) u8 {
-        return switch (self.peek_token.token) {
-            .plus => 1,
-            else => 0,
-        };
-    }
-
-    const ParserError = error{ InvalidToken, NotImplemented, OutOfMemory };
 };
+
+test "parse select statement" {
+    const heap_allocator = std.heap.page_allocator;
+    var arena = std.heap.ArenaAllocator.init(heap_allocator);
+    defer arena.deinit();
+    var item = arena.allocator().create(ast.Expression) catch return;
+    item.* = ast.Expression{ .identifier = "hello" };
+    var select_items = &[_]*ast.Expression{item};
+    const test_ast_statement = ast.Statement{ .select = query.SelectStatement{ .common_table_expression = null, .body = query.SelectBody{ .select_items = select_items[0..], .table = ast.Expression{ .identifier = "table1" } } } };
+    var allocator = arena.allocator();
+
+    var statements = [_]ast.Statement{test_ast_statement};
+    const testSql = ast.Sql{ .statements = &statements };
+
+    const input = "select hello from table1";
+
+    var lexer = lex.Lexer.new(input);
+    var parser = Parser.init(allocator, lexer);
+    const sql = try parser.parse();
+    try std.testing.expectEqualDeep(testSql, sql);
+}
