@@ -13,6 +13,7 @@ pub const TokenKind = enum {
     sharp,
     tilde,
     period,
+    semicolon,
     left_bracket,
     right_bracket,
     left_paren,
@@ -50,7 +51,7 @@ pub const TokenKind = enum {
     desc,
 };
 
-pub const Token = union(TokenKind) {
+pub const TokenType = union(TokenKind) {
     identifier: []const u8,
     quoted_identifier: []const u8,
     local_variable: []const u8,
@@ -63,6 +64,7 @@ pub const Token = union(TokenKind) {
     sharp,
     tilde,
     period,
+    semicolon,
     left_bracket,
     right_bracket,
     left_paren,
@@ -100,39 +102,39 @@ pub const Token = union(TokenKind) {
     desc,
 
     // keyword types
+    const map = std.StaticStringMap(TokenType).initComptime(.{
+        .{ "with", .with },
+        .{ "exec", .exec },
+        .{ "select", .select },
+        .{ "distinct", .distinct },
+        .{ "top", .top },
+        .{ "from", .from },
+        .{ "where", .where },
+        .{ "insert", .insert },
+        .{ "update", .update },
+        .{ "delete", .delete },
+        .{ "create", .create },
+        .{ "alter", .alter },
+        .{ "drop", .drop },
+        .{ "declare", .declare },
+        .{ "set", .set },
+        .{ "cast", .cast },
+        .{ "as", .as },
+        .{ "asc", .asc },
+        .{ "desc", .desc },
+    });
 
-    pub fn keyword(ident: []const u8) ?Token {
+    pub fn keyword(ident: []const u8) ?TokenType {
         var buf = [_]u8{0} ** 20;
         if (ident.len >= buf.len) {
             return null;
         }
         const lower_ident = std.ascii.lowerString(&buf, ident);
-        const map = std.ComptimeStringMap(Token, .{
-            .{ "with", .with },
-            .{ "exec", .exec },
-            .{ "select", .select },
-            .{ "distinct", .distinct },
-            .{ "top", .top },
-            .{ "from", .from },
-            .{ "where", .where },
-            .{ "insert", .insert },
-            .{ "update", .update },
-            .{ "delete", .delete },
-            .{ "create", .create },
-            .{ "alter", .alter },
-            .{ "drop", .drop },
-            .{ "declare", .declare },
-            .{ "set", .set },
-            .{ "cast", .cast },
-            .{ "as", .as },
-            .{ "asc", .asc },
-            .{ "desc", .desc },
-        });
 
         return map.get(lower_ident);
     }
 
-    pub fn to_string(self: Token) []const u8 {
+    pub fn toString(self: TokenType) []const u8 {
         return switch (self) {
             .identifier => "identifier",
             .quoted_identifier => "quoted_identifier",
@@ -144,6 +146,7 @@ pub const Token = union(TokenKind) {
             .sharp => "sharp",
             .tilde => "tilde",
             .period => "period",
+            .semicolon => "semicolon",
             .left_bracket => "left_bracket",
             .right_bracket => "right_bracket",
             .left_paren => "left_paren",
@@ -181,9 +184,15 @@ pub const Token = union(TokenKind) {
     }
 };
 
-pub const Location = struct { line: u64, column: u64 };
+pub const Position = struct {
+    line: usize,
+    column: usize,
 
-pub const TokenWithLocation = struct {
-    token: Token,
-    location: Location,
+    pub fn init(line: usize, column: usize) Position {
+        return .{ .line = line, .column = column };
+    }
 };
+
+token: TokenType,
+start_pos: Position,
+end_pos: Position,
