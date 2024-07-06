@@ -13,14 +13,14 @@ pub const Expression = union(enum) {
     bool_literal: bool,
     identifier: []u8,
     local_variable_identifier: []u8,
-    expr_list: std.ArrayList(*const Expression),
+    expr_list: std.ArrayList(*Expression),
     binary_expression: struct {
-        left: *const Expression,
-        right: *const Expression,
+        left: *Expression,
+        right: *Expression,
         op: BinaryOperator,
     },
     unary_expression: struct {
-        expr: *const Expression,
+        expr: *Expression,
         op: UnaryOperator,
     },
 };

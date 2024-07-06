@@ -130,7 +130,7 @@ fn parse_select(self: *Self) ParserError!query.Select {
     if (!try self.expect_peek_many(&[_]Token.TokenKind{ .identifier, .string_literal })) {
         return ParserError.InvalidToken;
     }
-    body.select_items = std.ArrayList(Expression).init(self.allocator);
+    body.select_items = std.ArrayList(*Expression).init(self.allocator);
     const column = try self.parse_expression(1);
     try body.select_items.append(column);
 
@@ -144,7 +144,7 @@ fn parse_select(self: *Self) ParserError!query.Select {
     return body;
 }
 
-fn parse_expression(self: *Self, precedence: u8) ParserError!Expression {
+fn parse_expression(self: *Self, precedence: u8) ParserError!*Expression {
     // check if the current token is an identifier
     // or if it is a prefix operator
     var left_expression = try self.parse_prefix_expression();
@@ -159,19 +159,27 @@ fn parse_expression(self: *Self, precedence: u8) ParserError!Expression {
     return left_expression;
 }
 
-fn parse_prefix_expression(self: *Self) ParserError!Expression {
+fn parse_prefix_expression(self: *Self) ParserError!*Expression {
+    const expr = try self.allocator.create(Expression);
+    errdefer self.allocator.destroy(expr);
+
     return switch (self.current_token.token) {
         .identifier, .number, .local_variable, .string_literal, .quoted_identifier => expr: {
             if (self.current_token.token == .identifier) {
-                break :expr Expression{ .identifier = self.current_token.token.identifier };
+                expr.* = Expression{ .identifier = self.current_token.token.identifier };
+                break :expr expr;
             } else if (self.current_token.token == .number) {
-                break :expr Expression{ .number_literal = self.current_token.token.number };
+                expr.* = Expression{ .number_literal = self.current_token.token.number };
+                break :expr expr;
             } else if (self.current_token.token == .local_variable) {
-                break :expr Expression{ .local_variable_identifier = self.current_token.token.local_variable };
+                expr.* = Expression{ .local_variable_identifier = self.current_token.token.local_variable };
+                break :expr expr;
             } else if (self.current_token.token == .string_literal) {
-                break :expr Expression{ .string_literal = self.current_token.token.string_literal };
+                expr.* = Expression{ .string_literal = self.current_token.token.string_literal };
+                break :expr expr;
             } else if (self.current_token.token == .quoted_identifier) {
-                break :expr Expression{ .quote_identifier = self.current_token.token.quoted_identifier };
+                expr.* = Expression{ .quote_identifier = self.current_token.token.quoted_identifier };
+                break :expr expr;
             }
 
             return ParserError.InvalidToken;
@@ -180,8 +188,11 @@ fn parse_prefix_expression(self: *Self) ParserError!Expression {
     };
 }
 
-fn parse_infix_expression(self: *Self, left: Expression) ParserError!Expression {
+fn parse_infix_expression(self: *Self, left: *Expression) ParserError!*Expression {
     _ = left;
+    const expr = try self.allocator.create(Expression);
+    errdefer self.allocator.destroy(expr);
+
     return switch (self.current_token.token) {
         // .plus, .minus => expr: {
         //     const operator = self.current_token;
@@ -207,11 +218,15 @@ test "parse select statement" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const hello_column = Expression{ .identifier = try allocator.dupe(u8, "hello") };
-    var select_items = std.ArrayList(Expression).init(allocator);
+    const hello_column = try allocator.create(Expression);
+    errdefer allocator.destroy(hello_column);
+    hello_column.* = Expression{ .identifier = try allocator.dupe(u8, "hello") };
+    var select_items = std.ArrayList(*Expression).init(allocator);
     try select_items.append(hello_column);
 
-    const table = Expression{ .identifier = try allocator.dupe(u8, "testtable") };
+    const table = try allocator.create(Expression);
+    errdefer allocator.destroy(table);
+    table.* = Expression{ .identifier = try allocator.dupe(u8, "testtable") };
     var statements = std.ArrayList(query.Statement).init(allocator);
     try statements.append(
         query.Statement{
