@@ -1,15 +1,18 @@
 const std = @import("std");
-const token = @import("../token.zig");
-const ast = @import("./ast.zig");
+const Expression = @import("./expression.zig").Expression;
 
-pub const SelectStatement = struct {
-    common_table_expression: ?CommonTableExpression,
-    body: SelectBody,
+pub const Select = struct {
+    select_items: std.ArrayList(Expression),
+    table: Expression,
+    where: ?Expression,
 };
 
-pub const CommonTableExpression = struct {};
-pub const SelectBody = struct {
-    select_items: []*ast.Expression,
-    table: *ast.Expression,
-    where: ?ast.Expression,
-};
+pub const CTEType = enum { select };
+
+pub const SelectCTE = struct { select: Select };
+
+pub const CTE = union(CTEType) { select: SelectCTE };
+
+pub const StatementType = enum { select, cte };
+
+pub const Statement = union(StatementType) { select: Select, cte: CTE };

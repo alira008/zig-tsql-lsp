@@ -1,14 +1,5 @@
 const std = @import("std");
-const token = @import("../token.zig");
 const query = @import("./query.zig");
-
-pub const Sql = struct {
-    statements: []Statement,
-};
-
-pub const Statement = union(enum) {
-    select: query.SelectStatement,
-};
 
 pub const Operators = enum {
     Case,
@@ -16,19 +7,20 @@ pub const Operators = enum {
 };
 
 pub const Expression = union(enum) {
-    expr_list: []*Expression,
     number_literal: f64,
-    string_literal: []const u8,
-    quote_identifier: []const u8,
+    string_literal: []u8,
+    quote_identifier: []u8,
     bool_literal: bool,
-    identifier: []const u8,
+    identifier: []u8,
+    local_variable_identifier: []u8,
+    expr_list: std.ArrayList(*const Expression),
     binary_expression: struct {
-        left: *Expression,
-        right: *Expression,
+        left: *const Expression,
+        right: *const Expression,
         op: BinaryOperator,
     },
     unary_expression: struct {
-        expr: *Expression,
+        expr: *const Expression,
         op: UnaryOperator,
     },
 };

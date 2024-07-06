@@ -1,5 +1,9 @@
 const std = @import("std");
 
+token: TokenType,
+start_pos: Position,
+end_pos: Position,
+
 pub const TokenKind = enum {
     identifier,
     quoted_identifier,
@@ -52,10 +56,10 @@ pub const TokenKind = enum {
 };
 
 pub const TokenType = union(TokenKind) {
-    identifier: []const u8,
-    quoted_identifier: []const u8,
-    local_variable: []const u8,
-    string_literal: []const u8,
+    identifier: []u8,
+    quoted_identifier: []u8,
+    local_variable: []u8,
+    string_literal: []u8,
     number: f64,
 
     illegal,
@@ -192,7 +196,3 @@ pub const Position = struct {
         return .{ .line = line, .column = column };
     }
 };
-
-token: TokenType,
-start_pos: Position,
-end_pos: Position,

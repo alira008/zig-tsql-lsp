@@ -4,6 +4,7 @@ const expectEqualDeep = std.testing.expectEqualDeep;
 
 const Self = @This();
 
+allocator: std.mem.Allocator,
 input: []const u8,
 position: usize = 0,
 read_position: usize = 0,
@@ -11,8 +12,9 @@ char: u8 = 0,
 line: usize = 1,
 column: usize = 0,
 
-pub fn new(input: []const u8) Self {
+pub fn new(allocator: std.mem.Allocator, input: []const u8) Self {
     var lexer = Self{
+        .allocator = allocator,
         .input = input,
     };
 
@@ -62,14 +64,13 @@ fn read_char(self: *Self) void {
     self.read_position += 1;
 }
 
-fn read_identifier(self: *Self) []const u8 {
+fn read_identifier(self: *Self) ![]u8 {
     const position = self.position;
 
     while (is_letter(self.peek_char()) and self.peek_char() != 0) {
         self.read_char();
     }
-
-    return self.input[position .. self.position + 1];
+    return try self.allocator.dupe(u8, self.input[position .. self.position + 1]);
 }
 
 fn read_number(self: *Self) []const u8 {
@@ -91,7 +92,7 @@ fn read_number(self: *Self) []const u8 {
     return self.input[position .. self.position + 1];
 }
 
-fn read_quoted_identifier(self: *Self) []const u8 {
+fn read_quoted_identifier(self: *Self) ![]u8 {
     // skip the quote character
     self.read_char();
     const position = self.position;
@@ -100,10 +101,10 @@ fn read_quoted_identifier(self: *Self) []const u8 {
     }
     // skip the quote character
     self.read_char();
-    return self.input[position..self.position];
+    return try self.allocator.dupe(u8, self.input[position..self.position]);
 }
 
-fn read_string_literal(self: *Self) []const u8 {
+fn read_string_literal(self: *Self) ![]u8 {
     // skip the quote character
     self.read_char();
     const position = self.position;
@@ -114,10 +115,10 @@ fn read_string_literal(self: *Self) []const u8 {
     // skip the quote character
     self.read_char();
 
-    return self.input[position..self.position];
+    return try self.allocator.dupe(u8, self.input[position..self.position]);
 }
 
-fn read_local_variable(self: *Self) []const u8 {
+fn read_local_variable(self: *Self) ![]u8 {
     // skip the @ character
     self.read_char();
     const position = self.position;
@@ -125,7 +126,7 @@ fn read_local_variable(self: *Self) []const u8 {
         self.read_char();
     }
 
-    return self.input[position .. self.position + 1];
+    return try self.allocator.dupe(u8, self.input[position .. self.position + 1]);
 }
 
 fn skip_whitespace(self: *Self) void {
@@ -134,7 +135,7 @@ fn skip_whitespace(self: *Self) void {
     }
 }
 
-pub fn next_token(self: *Self) Token {
+pub fn next_token(self: *Self) !Token {
     self.skip_whitespace();
 
     const start_pos = Token.Position.init(self.line, self.column);
@@ -148,21 +149,21 @@ pub fn next_token(self: *Self) Token {
         '+' => Token.TokenType.plus,
         '-' => Token.TokenType.minus,
         '\'' => blk: {
-            const word = self.read_string_literal();
+            const word = try self.read_string_literal();
             // read closing '\''
             self.read_char();
 
             break :blk .{ .string_literal = word };
         },
         '[' => blk: {
-            const word = self.read_quoted_identifier();
+            const word = try self.read_quoted_identifier();
             // read closing ']'
             self.read_char();
 
             break :blk .{ .quoted_identifier = word };
         },
         '@' => blk: {
-            const word = self.read_local_variable();
+            const word = try self.read_local_variable();
             break :blk .{ .local_variable = word };
         },
         ',' => Token.TokenType.comma,
@@ -190,7 +191,7 @@ pub fn next_token(self: *Self) Token {
             }
         },
         'a'...'z', 'A'...'Z', '_' => blk: {
-            const ident = self.read_identifier();
+            const ident = try self.read_identifier();
             if (Token.TokenType.keyword(ident)) |tok| {
                 break :blk tok;
             }
@@ -213,19 +214,23 @@ pub fn next_token(self: *Self) Token {
 }
 
 test "basic select test" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
     const input = "seLECt * from table;";
     const tests = [_]Token{
         .{ .token = Token.TokenType.select, .start_pos = .{ .line = 1, .column = 1 }, .end_pos = .{ .line = 1, .column = 6 } },
         .{ .token = Token.TokenType.asterisk, .start_pos = .{ .line = 1, .column = 8 }, .end_pos = .{ .line = 1, .column = 8 } },
         .{ .token = Token.TokenType.from, .start_pos = .{ .line = 1, .column = 10 }, .end_pos = .{ .line = 1, .column = 13 } },
-        .{ .token = Token.TokenType{ .identifier = "table" }, .start_pos = .{ .line = 1, .column = 15 }, .end_pos = .{ .line = 1, .column = 19 } },
+        .{ .token = Token.TokenType{ .identifier = try allocator.dupe(u8, "table") }, .start_pos = .{ .line = 1, .column = 15 }, .end_pos = .{ .line = 1, .column = 19 } },
         .{ .token = Token.TokenType.semicolon, .start_pos = .{ .line = 1, .column = 20 }, .end_pos = .{ .line = 1, .column = 20 } },
     };
 
-    var lexer = Self.new(input);
+    var lexer = Self.new(allocator, input);
 
     for (0..tests.len) |i| {
-        const tok = lexer.next_token();
+        const tok = try lexer.next_token();
         const test_token = tests[i];
 
         try expectEqualDeep(test_token, tok);
