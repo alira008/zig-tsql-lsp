@@ -69,6 +69,14 @@ fn next_token(self: *Self) void {
     };
 }
 
+fn debug_print_current_token(self: Self) void {
+    std.debug.print("current_token: {s}\n", .{self.current_token.token.toString()});
+}
+
+fn debug_print_peek_token(self: Self) void {
+    std.debug.print("peek_token: {s}\n", .{self.peek_token.token.toString()});
+}
+
 fn peek_token_is(self: *Self, expected: Token.TokenKind) bool {
     return @as(Token.TokenKind, self.peek_token.token) == expected;
 }
@@ -79,7 +87,7 @@ fn current_token_is(self: *Self, expected: Token.TokenKind) bool {
 
 fn expect_current(self: *Self, expected: Token.TokenKind) ParserError!void {
     if (self.current_token_is(expected)) {
-        return;
+        return self.next_token();
     } else {
         return self.error_context.addUnexpectedToken(&self.current_token, expected);
     }
@@ -87,7 +95,7 @@ fn expect_current(self: *Self, expected: Token.TokenKind) ParserError!void {
 
 fn expect_peek(self: *Self, expected: Token.TokenKind) ParserError!void {
     if (self.peek_token_is(expected)) {
-        return;
+        return self.next_token();
     } else {
         return self.error_context.addUnexpectedToken(&self.peek_token, expected);
     }
@@ -96,10 +104,19 @@ fn expect_peek(self: *Self, expected: Token.TokenKind) ParserError!void {
 fn expect_peek_many(self: *Self, expected: []const Token.TokenKind) ParserError!void {
     for (expected) |expected_token| {
         if (self.peek_token_is(expected_token)) {
-            return;
+            return self.next_token();
         }
     }
     return self.error_context.addUnexpectedTokenMany(&self.peek_token, expected);
+}
+
+fn peek_token_is_many(self: *Self, expected: []const Token.TokenKind) bool {
+    for (expected) |expected_token| {
+        if (self.peek_token_is(expected_token)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 fn parse_statement(self: *Self) ParserError!query.Statement {
@@ -144,28 +161,19 @@ fn parse_select(self: *Self) ParserError!query.Select {
     };
 
     // parse the columns
-    try self.expect_peek_many(&[_]Token.TokenKind{ .identifier, .string_literal, .number, .local_variable, .asterisk });
-
     body.select_items = std.ArrayList(*Expression).init(self.allocator);
-    while (!self.peek_token_is(Token.TokenKind.from) and
-        !self.peek_token_is(Token.TokenKind.with) and
-        !self.peek_token_is(Token.TokenKind.exec) and
-        !self.peek_token_is(Token.TokenKind.declare) and
-        !self.peek_token_is(Token.TokenKind.set) and
-        !self.peek_token_is(Token.TokenKind.eof))
-    {
+    while (self.peek_token_is_many(&[_]Token.TokenKind{ .identifier, .string_literal, .number, .local_variable, .asterisk, .left_paren })) {
         self.next_token();
-        if (body.select_items.items.len > 0) {
-            try self.expect_current(Token.TokenKind.comma);
-            self.next_token();
-        }
-        try self.expect_peek_many(&[_]Token.TokenKind{ .identifier, .string_literal, .number, .local_variable, .asterisk });
+
         const column = try self.parse_expression(1);
         try body.select_items.append(column);
+        if (!self.peek_token_is(Token.TokenKind.comma)) {
+            break;
+        }
+        self.next_token();
     }
 
     try self.expect_peek(.from);
-    self.next_token();
     self.next_token();
 
     const table = try self.parse_expression(1);
@@ -264,7 +272,7 @@ test "parse select statement" {
             .select = .{ .select_items = select_items, .table = table, .where = null },
         },
     );
-    const input = "select hello, from testtable";
+    const input = "select hello, hello from testtable";
 
     const lexer = Lexer.new(allocator, input);
     var parser = Self.init(allocator, lexer);

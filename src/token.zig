@@ -191,10 +191,10 @@ pub const TokenType = union(TokenKind) {
 
     pub fn toString(self: TokenType) []const u8 {
         return switch (self) {
-            .identifier => "identifier",
-            .quoted_identifier => "quoted_identifier",
-            .local_variable => "local_variable",
-            .string_literal => "string_literal",
+            .identifier => self.identifier,
+            .quoted_identifier => self.quoted_identifier,
+            .local_variable => self.local_variable,
+            .string_literal => self.string_literal,
             .number => "number",
             .illegal => "illegal",
             .eof => "eof",
