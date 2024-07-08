@@ -2,6 +2,7 @@ const std = @import("std");
 const query = @import("ast/query.zig");
 const expression = @import("ast/expression.zig");
 const Lexer = @import("lexer.zig");
+const LexerError = @import("lexer.zig").LexerError;
 const Token = @import("token.zig");
 const ErrorContext = @import("errors.zig").ErrorContext;
 const ParserError = @import("errors.zig").ParserError;
@@ -15,7 +16,7 @@ current_token: Token,
 peek_token: Token,
 error_context: ErrorContext,
 
-pub fn init(allocator: std.mem.Allocator, lexer: Lexer) !Self {
+pub fn init(allocator: std.mem.Allocator, lexer: Lexer) Self {
     var parser = Self{
         .allocator = allocator,
         .lexer = lexer,
@@ -24,27 +25,26 @@ pub fn init(allocator: std.mem.Allocator, lexer: Lexer) !Self {
         .error_context = ErrorContext.init(allocator),
     };
 
-    try parser.next_token();
-    try parser.next_token();
+    parser.next_token();
+    parser.next_token();
 
     return parser;
 }
 
-pub fn parse(self: *Self) !std.ArrayList(query.Statement) {
+pub fn parse(self: *Self) std.ArrayList(query.Statement) {
     var list = std.ArrayList(query.Statement).init(self.allocator);
     while (self.current_token.token != .eof) {
         const statement = self.parse_statement() catch |err| {
             std.debug.print("failed to parse statement\n", .{});
             std.debug.print("[error: line: {} col: {}]: {}\n", .{ self.current_token.end_pos.line, self.current_token.end_pos.column, err });
             self.error_context.handleError(err);
-            try self.next_token();
+            self.next_token();
             continue;
         };
         list.append(statement) catch {
             std.debug.print("failed to append statement to list\n", .{});
         };
-
-        try self.next_token();
+        self.next_token();
     }
     return list;
 }
@@ -60,16 +60,13 @@ fn peek_precedence(self: *Self) u8 {
     };
 }
 
-fn next_token(self: *Self) ParserError!void {
+fn next_token(self: *Self) void {
     self.current_token = self.peek_token;
     self.peek_token = self.lexer.next_token() catch |err| {
         switch (err) {
-            err.OutOfMemory => std.debug.panic("Out of memory in lexer", .{}),
+            LexerError.OutOfMemory => std.debug.panic("Out of memory in lexer", .{}),
         }
     };
-    if (@as(Token.TokenKind, self.peek_token.token) == Token.TokenKind.illegal) {
-        return ParserError.InvalidToken;
-    }
 }
 
 fn peek_token_is(self: *Self, expected: Token.TokenKind) bool {
@@ -80,23 +77,29 @@ fn current_token_is(self: *Self, expected: Token.TokenKind) bool {
     return @as(Token.TokenKind, self.current_token.token) == expected;
 }
 
-fn expect_peek(self: *Self, expected: Token.TokenKind) !bool {
-    if (self.peek_token_is(expected)) {
-        try self.next_token();
-        return true;
+fn expect_current(self: *Self, expected: Token.TokenKind) ParserError!void {
+    if (self.current_token_is(expected)) {
+        return;
     } else {
-        return false;
+        return self.error_context.addUnexpectedToken(&self.current_token, expected);
     }
 }
 
-fn expect_peek_many(self: *Self, expected: []const Token.TokenKind) ParserError!bool {
+fn expect_peek(self: *Self, expected: Token.TokenKind) ParserError!void {
+    if (self.peek_token_is(expected)) {
+        return;
+    } else {
+        return self.error_context.addUnexpectedToken(&self.peek_token, expected);
+    }
+}
+
+fn expect_peek_many(self: *Self, expected: []const Token.TokenKind) ParserError!void {
     for (expected) |expected_token| {
         if (self.peek_token_is(expected_token)) {
-            try self.next_token();
-            return true;
+            return;
         }
     }
-    return false;
+    return self.error_context.addUnexpectedTokenMany(&self.peek_token, expected);
 }
 
 fn parse_statement(self: *Self) ParserError!query.Statement {
@@ -111,7 +114,7 @@ fn parse_statement(self: *Self) ParserError!query.Statement {
             const select = try self.parse_select();
             break :blk query.Statement{ .select = select };
         },
-        else => ParserError.NotImplemented,
+        else => self.error_context.addNotImplementedError(&self.current_token),
     };
 }
 
@@ -141,17 +144,30 @@ fn parse_select(self: *Self) ParserError!query.Select {
     };
 
     // parse the columns
-    if (!try self.expect_peek_many(&[_]Token.TokenKind{ .identifier, .string_literal, .number, .local_variable })) {
-        return ParserError.InvalidToken;
-    }
-    body.select_items = std.ArrayList(*Expression).init(self.allocator);
-    const column = try self.parse_expression(1);
-    try body.select_items.append(column);
+    try self.expect_peek_many(&[_]Token.TokenKind{ .identifier, .string_literal, .number, .local_variable, .asterisk });
 
-    if (!try self.expect_peek(.from)) {
-        return ParserError.InvalidToken;
+    body.select_items = std.ArrayList(*Expression).init(self.allocator);
+    while (!self.peek_token_is(Token.TokenKind.from) and
+        !self.peek_token_is(Token.TokenKind.with) and
+        !self.peek_token_is(Token.TokenKind.exec) and
+        !self.peek_token_is(Token.TokenKind.declare) and
+        !self.peek_token_is(Token.TokenKind.set) and
+        !self.peek_token_is(Token.TokenKind.eof))
+    {
+        self.next_token();
+        if (body.select_items.items.len > 0) {
+            try self.expect_current(Token.TokenKind.comma);
+            self.next_token();
+        }
+        try self.expect_peek_many(&[_]Token.TokenKind{ .identifier, .string_literal, .number, .local_variable, .asterisk });
+        const column = try self.parse_expression(1);
+        try body.select_items.append(column);
     }
-    try self.next_token();
+
+    try self.expect_peek(.from);
+    self.next_token();
+    self.next_token();
+
     const table = try self.parse_expression(1);
     body.table = table;
 
@@ -165,7 +181,7 @@ fn parse_expression(self: *Self, precedence: u8) ParserError!*Expression {
 
     while (precedence < self.peek_precedence()) {
         // move to the next token
-        try self.next_token();
+        self.next_token();
 
         left_expression = try self.parse_infix_expression(left_expression);
     }
@@ -196,9 +212,9 @@ fn parse_prefix_expression(self: *Self) ParserError!*Expression {
                 break :expr expr;
             }
 
-            return ParserError.InvalidToken;
+            return self.error_context.addUnexpectedToken(&self.current_token, null);
         },
-        else => ParserError.InvalidToken,
+        else => self.error_context.addUnexpectedToken(&self.current_token, null),
     };
 }
 
@@ -223,7 +239,7 @@ fn parse_infix_expression(self: *Self, left: *Expression) ParserError!*Expressio
         //
         //     break :expr binary_expr;
         // },
-        else => ParserError.InvalidToken,
+        else => self.error_context.addUnexpectedToken(&self.current_token, null),
     };
 }
 
@@ -237,6 +253,7 @@ test "parse select statement" {
     hello_column.* = Expression{ .identifier = try allocator.dupe(u8, "hello") };
     var select_items = std.ArrayList(*Expression).init(allocator);
     try select_items.append(hello_column);
+    try select_items.append(hello_column);
 
     const table = try allocator.create(Expression);
     errdefer allocator.destroy(table);
@@ -247,10 +264,16 @@ test "parse select statement" {
             .select = .{ .select_items = select_items, .table = table, .where = null },
         },
     );
-    const input = "select hello from testtable";
+    const input = "select hello, from testtable";
 
     const lexer = Lexer.new(allocator, input);
-    var parser = try Self.init(allocator, lexer);
-    const parsed_sql = try parser.parse();
+    var parser = Self.init(allocator, lexer);
+    const parsed_sql = parser.parse();
+    if (parser.errors().len > 0) {
+        std.debug.print("errors: \n", .{});
+        for (parser.errors()) |err| {
+            std.debug.print("\t{s}\n", .{err});
+        }
+    }
     try std.testing.expectEqualDeep(statements, parsed_sql);
 }

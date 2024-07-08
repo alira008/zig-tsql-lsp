@@ -53,6 +53,57 @@ pub const TokenKind = enum {
     as,
     asc,
     desc,
+
+    const Self = @This();
+
+    pub fn toString(self: Self) []const u8 {
+        return switch (self) {
+            .identifier => "identifier",
+            .quoted_identifier => "quoted_identifier",
+            .local_variable => "local_variable",
+            .string_literal => "string_literal",
+            .number => "number",
+            .illegal => "illegal",
+            .eof => "eof",
+            .sharp => "sharp",
+            .tilde => "tilde",
+            .period => "period",
+            .semicolon => "semicolon",
+            .left_bracket => "left_bracket",
+            .right_bracket => "right_bracket",
+            .left_paren => "left_paren",
+            .right_paren => "right_paren",
+            .plus => "plus",
+            .minus => "minus",
+            .comma => "comma",
+            .less_than => "less_than",
+            .greater_than => "greater_than",
+            .less_than_equal => "less_than_equal",
+            .greater_than_equal => "greater_than_equal",
+            .equal => "equal",
+            .not_equal => "not_equal",
+            .asterisk => "asterisk",
+            .with => "with",
+            .exec => "exec",
+            .select => "select",
+            .distinct => "distinct",
+            .top => "top",
+            .from => "from",
+            .where => "where",
+            .insert => "insert",
+            .update => "update",
+            .delete => "delete",
+            .create => "create",
+            .alter => "alter",
+            .drop => "drop",
+            .declare => "declare",
+            .set => "set",
+            .cast => "cast",
+            .as => "as",
+            .asc => "asc",
+            .desc => "desc",
+        };
+    }
 };
 
 pub const TokenType = union(TokenKind) {
