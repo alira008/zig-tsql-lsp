@@ -2,6 +2,8 @@ const std = @import("std");
 const Token = @import("token.zig");
 const expectEqualDeep = std.testing.expectEqualDeep;
 
+pub const LexerError = error{OutOfMemory};
+
 const Self = @This();
 
 allocator: std.mem.Allocator,
@@ -64,13 +66,15 @@ fn read_char(self: *Self) void {
     self.read_position += 1;
 }
 
-fn read_identifier(self: *Self) ![]u8 {
+fn read_identifier(self: *Self) LexerError![]u8 {
     const position = self.position;
 
     while (is_letter(self.peek_char()) and self.peek_char() != 0) {
         self.read_char();
     }
-    return try self.allocator.dupe(u8, self.input[position .. self.position + 1]);
+    return self.allocator.dupe(u8, self.input[position .. self.position + 1]) catch {
+        return LexerError.OutOfMemory;
+    };
 }
 
 fn read_number(self: *Self) []const u8 {
@@ -92,7 +96,7 @@ fn read_number(self: *Self) []const u8 {
     return self.input[position .. self.position + 1];
 }
 
-fn read_quoted_identifier(self: *Self) ![]u8 {
+fn read_quoted_identifier(self: *Self) LexerError![]u8 {
     // skip the quote character
     self.read_char();
     const position = self.position;
@@ -101,10 +105,12 @@ fn read_quoted_identifier(self: *Self) ![]u8 {
     }
     // skip the quote character
     self.read_char();
-    return try self.allocator.dupe(u8, self.input[position..self.position]);
+    return self.allocator.dupe(u8, self.input[position..self.position]) catch {
+        return LexerError.OutOfMemory;
+    };
 }
 
-fn read_string_literal(self: *Self) ![]u8 {
+fn read_string_literal(self: *Self) LexerError![]u8 {
     // skip the quote character
     self.read_char();
     const position = self.position;
@@ -115,10 +121,12 @@ fn read_string_literal(self: *Self) ![]u8 {
     // skip the quote character
     self.read_char();
 
-    return try self.allocator.dupe(u8, self.input[position..self.position]);
+    return self.allocator.dupe(u8, self.input[position..self.position]) catch {
+        return LexerError.OutOfMemory;
+    };
 }
 
-fn read_local_variable(self: *Self) ![]u8 {
+fn read_local_variable(self: *Self) LexerError![]u8 {
     // skip the @ character
     self.read_char();
     const position = self.position;
@@ -126,7 +134,9 @@ fn read_local_variable(self: *Self) ![]u8 {
         self.read_char();
     }
 
-    return try self.allocator.dupe(u8, self.input[position .. self.position + 1]);
+    return self.allocator.dupe(u8, self.input[position .. self.position + 1]) catch {
+        return LexerError.OutOfMemory;
+    };
 }
 
 fn skip_whitespace(self: *Self) void {
@@ -135,7 +145,7 @@ fn skip_whitespace(self: *Self) void {
     }
 }
 
-pub fn next_token(self: *Self) !Token {
+pub fn next_token(self: *Self) LexerError!Token {
     self.skip_whitespace();
 
     const start_pos = Token.Position.init(self.line, self.column);

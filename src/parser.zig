@@ -1,8 +1,10 @@
-const Lexer = @import("lexer.zig");
-const Token = @import("token.zig");
 const std = @import("std");
 const query = @import("ast/query.zig");
 const expression = @import("ast/expression.zig");
+const Lexer = @import("lexer.zig");
+const Token = @import("token.zig");
+const ErrorContext = @import("errors.zig").ErrorContext;
+const ParserError = @import("errors.zig").ParserError;
 const Expression = expression.Expression;
 
 const Self = @This();
@@ -11,6 +13,7 @@ allocator: std.mem.Allocator,
 lexer: Lexer,
 current_token: Token,
 peek_token: Token,
+error_context: ErrorContext,
 
 pub fn init(allocator: std.mem.Allocator, lexer: Lexer) !Self {
     var parser = Self{
@@ -18,6 +21,7 @@ pub fn init(allocator: std.mem.Allocator, lexer: Lexer) !Self {
         .lexer = lexer,
         .current_token = undefined,
         .peek_token = undefined,
+        .error_context = ErrorContext.init(allocator),
     };
 
     try parser.next_token();
@@ -32,6 +36,7 @@ pub fn parse(self: *Self) !std.ArrayList(query.Statement) {
         const statement = self.parse_statement() catch |err| {
             std.debug.print("failed to parse statement\n", .{});
             std.debug.print("[error: line: {} col: {}]: {}\n", .{ self.current_token.end_pos.line, self.current_token.end_pos.column, err });
+            self.error_context.handleError(err);
             try self.next_token();
             continue;
         };
@@ -44,7 +49,9 @@ pub fn parse(self: *Self) !std.ArrayList(query.Statement) {
     return list;
 }
 
-const ParserError = error{ InvalidToken, NotImplemented, OutOfMemory };
+pub fn errors(self: Self) [][]u8 {
+    return self.error_context.errors.items;
+}
 
 fn peek_precedence(self: *Self) u8 {
     return switch (self.peek_token.token) {
@@ -53,9 +60,16 @@ fn peek_precedence(self: *Self) u8 {
     };
 }
 
-fn next_token(self: *Self) !void {
+fn next_token(self: *Self) ParserError!void {
     self.current_token = self.peek_token;
-    self.peek_token = try self.lexer.next_token();
+    self.peek_token = self.lexer.next_token() catch |err| {
+        switch (err) {
+            err.OutOfMemory => std.debug.panic("Out of memory in lexer", .{}),
+        }
+    };
+    if (@as(Token.TokenKind, self.peek_token.token) == Token.TokenKind.illegal) {
+        return ParserError.InvalidToken;
+    }
 }
 
 fn peek_token_is(self: *Self, expected: Token.TokenKind) bool {
@@ -75,7 +89,7 @@ fn expect_peek(self: *Self, expected: Token.TokenKind) !bool {
     }
 }
 
-fn expect_peek_many(self: *Self, expected: []const Token.TokenKind) !bool {
+fn expect_peek_many(self: *Self, expected: []const Token.TokenKind) ParserError!bool {
     for (expected) |expected_token| {
         if (self.peek_token_is(expected_token)) {
             try self.next_token();
@@ -127,7 +141,7 @@ fn parse_select(self: *Self) ParserError!query.Select {
     };
 
     // parse the columns
-    if (!try self.expect_peek_many(&[_]Token.TokenKind{ .identifier, .string_literal })) {
+    if (!try self.expect_peek_many(&[_]Token.TokenKind{ .identifier, .string_literal, .number, .local_variable })) {
         return ParserError.InvalidToken;
     }
     body.select_items = std.ArrayList(*Expression).init(self.allocator);
