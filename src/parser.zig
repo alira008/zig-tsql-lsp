@@ -62,11 +62,7 @@ fn peek_precedence(self: *Self) u8 {
 
 fn next_token(self: *Self) void {
     self.current_token = self.peek_token;
-    self.peek_token = self.lexer.next_token() catch |err| {
-        switch (err) {
-            LexerError.OutOfMemory => std.debug.panic("Out of memory in lexer", .{}),
-        }
-    };
+    self.peek_token = self.lexer.next_token();
 }
 
 fn debug_print_current_token(self: Self) void {
@@ -204,19 +200,19 @@ fn parse_prefix_expression(self: *Self) ParserError!*Expression {
     return switch (self.current_token.token) {
         .identifier, .number, .local_variable, .string_literal, .quoted_identifier => expr: {
             if (self.current_token.token == .identifier) {
-                expr.* = Expression{ .identifier = self.current_token.token.identifier };
+                expr.* = Expression{ .identifier = try self.allocator.dupe(u8, self.current_token.token.identifier) };
                 break :expr expr;
             } else if (self.current_token.token == .number) {
                 expr.* = Expression{ .number_literal = self.current_token.token.number };
                 break :expr expr;
             } else if (self.current_token.token == .local_variable) {
-                expr.* = Expression{ .local_variable_identifier = self.current_token.token.local_variable };
+                expr.* = Expression{ .local_variable_identifier = try self.allocator.dupe(u8, self.current_token.token.local_variable) };
                 break :expr expr;
             } else if (self.current_token.token == .string_literal) {
-                expr.* = Expression{ .string_literal = self.current_token.token.string_literal };
+                expr.* = Expression{ .string_literal = try self.allocator.dupe(u8, self.current_token.token.string_literal) };
                 break :expr expr;
             } else if (self.current_token.token == .quoted_identifier) {
-                expr.* = Expression{ .quote_identifier = self.current_token.token.quoted_identifier };
+                expr.* = Expression{ .quote_identifier = try self.allocator.dupe(u8, self.current_token.token.quoted_identifier) };
                 break :expr expr;
             }
 
@@ -274,7 +270,7 @@ test "parse select statement" {
     );
     const input = "select hello, hello from testtable";
 
-    const lexer = Lexer.new(allocator, input);
+    const lexer = Lexer.new(input);
     var parser = Self.init(allocator, lexer);
     const parsed_sql = parser.parse();
     if (parser.errors().len > 0) {
