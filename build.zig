@@ -14,6 +14,8 @@ pub fn build(b: *std.Build) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall. Here we do not
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
+    const lexer = b.addModule("lexer", .{ .root_source_file = b.path("src/lexer/lexer.zig") });
+    const ast = b.addModule("ast", .{ .root_source_file = b.path("src/ast/ast.zig") });
 
     const exe = b.addExecutable(.{
         .name = "sql-lsp",
@@ -23,6 +25,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    exe.root_module.addImport("lexer", lexer);
+    exe.root_module.addImport("ast", ast);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

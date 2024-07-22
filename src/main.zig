@@ -1,6 +1,6 @@
 const std = @import("std");
-const Lexer = @import("lexer.zig");
-const Parser = @import("parser.zig");
+const Lexer = @import("lexer");
+const Parser = @import("parser/parser.zig");
 
 pub fn main() void {
     const input = "select distinct hello.*, [hello] as tester from users";

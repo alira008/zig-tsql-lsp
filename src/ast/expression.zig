@@ -1,5 +1,5 @@
 const std = @import("std");
-const query = @import("./query.zig");
+const query = @import("query.zig");
 
 pub const Operators = enum {
     Case,
@@ -13,7 +13,7 @@ pub const Expression = union(enum) {
     bool_literal: bool,
     identifier: []u8,
     local_variable_identifier: []u8,
-    expr_list: std.ArrayList(*Expression),
+    expr_list: []*Expression,
     binary_expression: struct {
         left: *Expression,
         right: *Expression,

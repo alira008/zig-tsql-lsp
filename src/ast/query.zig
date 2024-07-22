@@ -1,8 +1,8 @@
 const std = @import("std");
-const Expression = @import("./expression.zig").Expression;
+const Expression = @import("expression.zig").Expression;
 
 pub const Select = struct {
-    select_items: std.ArrayList(*Expression),
+    select_items: []*Expression,
     table: *Expression,
     where: ?*Expression,
 };

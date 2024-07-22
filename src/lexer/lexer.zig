@@ -1,5 +1,5 @@
 const std = @import("std");
-const Token = @import("token.zig");
+pub const Token = @import("token.zig");
 const expectEqualDeep = std.testing.expectEqualDeep;
 
 pub const LexerError = error{OutOfMemory};

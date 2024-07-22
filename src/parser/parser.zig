@@ -1,12 +1,16 @@
 const std = @import("std");
-const query = @import("ast/query.zig");
-const expression = @import("ast/expression.zig");
-const Lexer = @import("lexer.zig");
-const LexerError = @import("lexer.zig").LexerError;
-const Token = @import("token.zig");
-const ErrorContext = @import("errors.zig").ErrorContext;
-const ParserError = @import("errors.zig").ParserError;
-const Expression = expression.Expression;
+const ast = @import("ast");
+const Lexer = @import("lexer");
+const query = ast.query;
+const errors = @import("errors.zig");
+const OperatorPrecedence = @import("precedence.zig").OperatorPrecedence;
+const OperatorPrecendenceMap = @import("precedence.zig").OperatorPrecendenceMap;
+const LexerError = Lexer.LexerError;
+const Token = Lexer.Token;
+const TokenKind = Token.TokenKind;
+const ErrorContext = errors.ErrorContext;
+const ParserError = errors.ParserError;
+const Expression = ast.expression.Expression;
 
 const Self = @This();
 
@@ -49,11 +53,7 @@ pub fn parse(self: *Self) std.ArrayList(query.Statement) {
     return list;
 }
 
-pub fn errors(self: Self) [][]u8 {
-    return self.error_context.errors.items;
-}
-
-fn peek_precedence(self: *Self) u8 {
+fn peek_precedence(self: *Self) OperatorPrecedence {
     return switch (self.peek_token.token) {
         .plus => 1,
         else => 0,
@@ -73,15 +73,15 @@ fn debug_print_peek_token(self: Self) void {
     std.debug.print("peek_token: {s}\n", .{self.peek_token.token.toString()});
 }
 
-fn peek_token_is(self: *Self, expected: Token.TokenKind) bool {
-    return @as(Token.TokenKind, self.peek_token.token) == expected;
+fn peek_token_is(self: *Self, expected: TokenKind) bool {
+    return @as(TokenKind, self.peek_token.token) == expected;
 }
 
-fn current_token_is(self: *Self, expected: Token.TokenKind) bool {
-    return @as(Token.TokenKind, self.current_token.token) == expected;
+fn current_token_is(self: *Self, expected: TokenKind) bool {
+    return @as(TokenKind, self.current_token.token) == expected;
 }
 
-fn expect_current(self: *Self, expected: Token.TokenKind) ParserError!void {
+fn expect_current(self: *Self, expected: TokenKind) ParserError!void {
     if (self.current_token_is(expected)) {
         return self.next_token();
     } else {
@@ -89,7 +89,7 @@ fn expect_current(self: *Self, expected: Token.TokenKind) ParserError!void {
     }
 }
 
-fn expect_peek(self: *Self, expected: Token.TokenKind) ParserError!void {
+fn expect_peek(self: *Self, expected: TokenKind) ParserError!void {
     if (self.peek_token_is(expected)) {
         return self.next_token();
     } else {
@@ -97,7 +97,7 @@ fn expect_peek(self: *Self, expected: Token.TokenKind) ParserError!void {
     }
 }
 
-fn expect_peek_many(self: *Self, expected: []const Token.TokenKind) ParserError!void {
+fn expect_peek_many(self: *Self, expected: []const TokenKind) ParserError!void {
     for (expected) |expected_token| {
         if (self.peek_token_is(expected_token)) {
             return self.next_token();
@@ -106,7 +106,7 @@ fn expect_peek_many(self: *Self, expected: []const Token.TokenKind) ParserError!
     return self.error_context.addUnexpectedTokenMany(&self.peek_token, expected);
 }
 
-fn peek_token_is_many(self: *Self, expected: []const Token.TokenKind) bool {
+fn peek_token_is_many(self: *Self, expected: []const TokenKind) bool {
     for (expected) |expected_token| {
         if (self.peek_token_is(expected_token)) {
             return true;
@@ -157,13 +157,13 @@ fn parse_select(self: *Self) ParserError!query.Select {
     };
 
     // parse the columns
-    body.select_items = std.ArrayList(*Expression).init(self.allocator);
-    while (self.peek_token_is_many(&[_]Token.TokenKind{ .identifier, .string_literal, .number, .local_variable, .asterisk, .left_paren })) {
+    var select_items = std.ArrayList(*Expression).init(self.allocator);
+    while (self.peek_token_is_many(&[_]TokenKind{ .identifier, .string_literal, .number, .local_variable, .asterisk, .left_paren })) {
         self.next_token();
 
         const column = try self.parse_expression(1);
-        try body.select_items.append(column);
-        if (!self.peek_token_is(Token.TokenKind.comma)) {
+        try select_items.append(column);
+        if (!self.peek_token_is(TokenKind.comma)) {
             break;
         }
         self.next_token();
@@ -174,11 +174,12 @@ fn parse_select(self: *Self) ParserError!query.Select {
 
     const table = try self.parse_expression(1);
     body.table = table;
+    body.select_items = try select_items.toOwnedSlice();
 
     return body;
 }
 
-fn parse_expression(self: *Self, precedence: u8) ParserError!*Expression {
+fn parse_expression(self: *Self, precedence: OperatorPrecedence) ParserError!*Expression {
     // check if the current token is an identifier
     // or if it is a prefix operator
     var left_expression = try self.parse_prefix_expression();
@@ -265,7 +266,7 @@ test "parse select statement" {
     var statements = std.ArrayList(query.Statement).init(allocator);
     try statements.append(
         query.Statement{
-            .select = .{ .select_items = select_items, .table = table, .where = null },
+            .select = .{ .select_items = try select_items.toOwnedSlice(), .table = table, .where = null },
         },
     );
     const input = "select hello, hello from testtable";
