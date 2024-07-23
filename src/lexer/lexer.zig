@@ -144,54 +144,55 @@ pub fn next_token(self: *Self) Token {
 
     const start_pos = Token.Position.init(self.line, self.column);
     const tok: Token.TokenType = switch (self.char) {
-        '#' => Token.TokenType.sharp,
-        '~' => Token.TokenType.tilde,
-        '.' => Token.TokenType.period,
-        ';' => Token.TokenType.semicolon,
-        '(' => Token.TokenType.left_paren,
-        ')' => Token.TokenType.right_paren,
-        '+' => Token.TokenType.plus,
-        '-' => Token.TokenType.minus,
+        '#' => .sharp,
+        '~' => .tilde,
+        '.' => .period,
+        ';' => .semicolon,
+        '(' => .left_paren,
+        ')' => .right_paren,
+        '+' => .plus,
+        '-' => .minus,
+        '/' => .forward_slash,
         '\'' => blk: {
             const word = self.read_string_literal();
-            // read closing '\''
-            self.read_char();
-
             break :blk .{ .string_literal = word };
         },
         '[' => blk: {
             const word = self.read_quoted_identifier();
-            // read closing ']'
-            self.read_char();
-
             break :blk .{ .quoted_identifier = word };
         },
         '@' => blk: {
             const word = self.read_local_variable();
             break :blk .{ .local_variable = word };
         },
-        ',' => Token.TokenType.comma,
+        ',' => .comma,
         '<' => blk: {
             if (self.peek_char() == '=') {
-                break :blk Token.TokenType.less_than_equal;
+                self.read_char();
+                break :blk .less_than_equal;
+            } else if (self.peek_char() == '>') {
+                self.read_char();
+                break :blk .not_equal_arrow;
             } else {
-                break :blk Token.TokenType.less_than;
+                break :blk .less_than;
             }
         },
         '>' => blk: {
             if (self.peek_char() == '=') {
-                break :blk Token.TokenType.greater_than_equal;
+                self.read_char();
+                break :blk .greater_than_equal;
             } else {
-                break :blk Token.TokenType.greater_than;
+                break :blk .greater_than;
             }
         },
-        '=' => Token.TokenType.equal,
-        '*' => Token.TokenType.asterisk,
+        '=' => .equal,
+        '*' => .asterisk,
         '!' => blk: {
             if (self.peek_char() == '=') {
-                break :blk Token.TokenType.not_equal;
+                self.read_char();
+                break :blk .not_equal_bang;
             } else {
-                break :blk Token.TokenType.illegal;
+                break :blk .illegal;
             }
         },
         'a'...'z', 'A'...'Z', '_' => blk: {
@@ -204,11 +205,15 @@ pub fn next_token(self: *Self) Token {
         '0'...'9' => blk: {
             const num_str = self.read_number();
 
-            const number = std.fmt.parseFloat(f64, num_str) catch return .{ .token = Token.TokenType.illegal, .start_pos = start_pos, .end_pos = Token.Position.init(self.line, self.column) };
+            const number = std.fmt.parseFloat(f64, num_str) catch return .{
+                .token = .illegal,
+                .start_pos = start_pos,
+                .end_pos = Token.Position.init(self.line, self.column),
+            };
             break :blk .{ .number = number };
         },
-        0 => Token.TokenType.eof,
-        else => Token.TokenType.illegal,
+        0 => .eof,
+        else => .illegal,
     };
 
     const end_pos = Token.Position.init(self.line, self.column);
@@ -220,11 +225,126 @@ pub fn next_token(self: *Self) Token {
 test "basic select test" {
     const input = "seLECt * from table;";
     const tests = [_]Token{
-        .{ .token = Token.TokenType.select, .start_pos = .{ .line = 1, .column = 1 }, .end_pos = .{ .line = 1, .column = 6 } },
-        .{ .token = Token.TokenType.asterisk, .start_pos = .{ .line = 1, .column = 8 }, .end_pos = .{ .line = 1, .column = 8 } },
-        .{ .token = Token.TokenType.from, .start_pos = .{ .line = 1, .column = 10 }, .end_pos = .{ .line = 1, .column = 13 } },
-        .{ .token = Token.TokenType{ .identifier = "table" }, .start_pos = .{ .line = 1, .column = 15 }, .end_pos = .{ .line = 1, .column = 19 } },
-        .{ .token = Token.TokenType.semicolon, .start_pos = .{ .line = 1, .column = 20 }, .end_pos = .{ .line = 1, .column = 20 } },
+        .{ .token = .select, .start_pos = .{ .line = 1, .column = 1 }, .end_pos = .{ .line = 1, .column = 6 } },
+        .{ .token = .asterisk, .start_pos = .{ .line = 1, .column = 8 }, .end_pos = .{ .line = 1, .column = 8 } },
+        .{ .token = .from, .start_pos = .{ .line = 1, .column = 10 }, .end_pos = .{ .line = 1, .column = 13 } },
+        .{ .token = .{ .identifier = "table" }, .start_pos = .{ .line = 1, .column = 15 }, .end_pos = .{ .line = 1, .column = 19 } },
+        .{ .token = .semicolon, .start_pos = .{ .line = 1, .column = 20 }, .end_pos = .{ .line = 1, .column = 20 } },
+    };
+
+    var lexer = Self.new(input);
+
+    for (0..tests.len) |i| {
+        const tok = lexer.next_token();
+        const test_token = tests[i];
+
+        try expectEqualDeep(test_token, tok);
+    }
+}
+
+test "basic token test" {
+    const input = "seLECt 2.3435 [hello] @yes 'test' / * -  !=  +;";
+    const tests = [_]Token{
+        .{
+            .token = .select,
+            .start_pos = .{ .line = 1, .column = 1 },
+            .end_pos = .{ .line = 1, .column = 6 },
+        },
+        .{
+            .token = .{ .number = 2.3435 },
+            .start_pos = .{ .line = 1, .column = 8 },
+            .end_pos = .{ .line = 1, .column = 13 },
+        },
+        .{
+            .token = .{ .quoted_identifier = "hello" },
+            .start_pos = .{ .line = 1, .column = 15 },
+            .end_pos = .{ .line = 1, .column = 21 },
+        },
+        .{
+            .token = .{ .local_variable = "yes" },
+            .start_pos = .{ .line = 1, .column = 23 },
+            .end_pos = .{ .line = 1, .column = 26 },
+        },
+        .{
+            .token = .{ .string_literal = "test" },
+            .start_pos = .{ .line = 1, .column = 28 },
+            .end_pos = .{ .line = 1, .column = 33 },
+        },
+        .{
+            .token = .forward_slash,
+            .start_pos = .{ .line = 1, .column = 35 },
+            .end_pos = .{ .line = 1, .column = 35 },
+        },
+        .{
+            .token = .asterisk,
+            .start_pos = .{ .line = 1, .column = 37 },
+            .end_pos = .{ .line = 1, .column = 37 },
+        },
+        .{
+            .token = .minus,
+            .start_pos = .{ .line = 1, .column = 39 },
+            .end_pos = .{ .line = 1, .column = 39 },
+        },
+        .{
+            .token = .not_equal_bang,
+            .start_pos = .{ .line = 1, .column = 42 },
+            .end_pos = .{ .line = 1, .column = 43 },
+        },
+        .{
+            .token = .plus,
+            .start_pos = .{ .line = 1, .column = 46 },
+            .end_pos = .{ .line = 1, .column = 46 },
+        },
+        .{
+            .token = .semicolon,
+            .start_pos = .{ .line = 1, .column = 47 },
+            .end_pos = .{ .line = 1, .column = 47 },
+        },
+    };
+
+    var lexer = Self.new(input);
+
+    for (0..tests.len) |i| {
+        const tok = lexer.next_token();
+        const test_token = tests[i];
+
+        try expectEqualDeep(test_token, tok);
+    }
+}
+
+test "some keywords test" {
+    const input = "seLECt and numeric where row in";
+    const tests = [_]Token{
+        .{
+            .token = .select,
+            .start_pos = .{ .line = 1, .column = 1 },
+            .end_pos = .{ .line = 1, .column = 6 },
+        },
+        .{
+            .token = .and_,
+            .start_pos = .{ .line = 1, .column = 8 },
+            .end_pos = .{ .line = 1, .column = 10 },
+        },
+        .{
+            .token = .numeric,
+            .start_pos = .{ .line = 1, .column = 12 },
+            .end_pos = .{ .line = 1, .column = 18 },
+        },
+        .{
+            .token = .where,
+            .start_pos = .{ .line = 1, .column = 20 },
+            .end_pos = .{ .line = 1, .column = 24 },
+        },
+        .{
+            .token = .row,
+            .start_pos = .{ .line = 1, .column = 26 },
+            .end_pos = .{ .line = 1, .column = 28 },
+        },
+        .{
+            .token = .in,
+            .start_pos = .{ .line = 1, .column = 30 },
+            .end_pos = .{ .line = 1, .column = 31 },
+        },
     };
 
     var lexer = Self.new(input);
