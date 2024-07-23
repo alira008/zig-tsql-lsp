@@ -4,7 +4,7 @@ const Lexer = @import("lexer");
 const query = ast.query;
 const errors = @import("errors.zig");
 const OperatorPrecedence = @import("precedence.zig").OperatorPrecedence;
-const OperatorPrecendenceMap = @import("precedence.zig").OperatorPrecendenceMap;
+const getPrecedence = @import("precedence.zig").getPrecedence;
 const LexerError = Lexer.LexerError;
 const Token = Lexer.Token;
 const TokenKind = Token.TokenKind;
@@ -54,8 +54,7 @@ pub fn parse(self: *Self) std.ArrayList(query.Statement) {
 }
 
 fn peek_precedence(self: *Self) OperatorPrecedence {
-    _ = self;
-    return .lowest;
+    return getPrecedence(self.peek_token.token);
 }
 
 fn next_token(self: *Self) void {
