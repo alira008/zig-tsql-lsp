@@ -1,4 +1,6 @@
 const std = @import("std");
+const Lexer = @import("lexer");
+const TokenKind = Lexer.TokenKind;
 
 pub const OperatorPrecedence = enum(u4) {
     lowest,
@@ -13,6 +15,36 @@ pub const OperatorPrecedence = enum(u4) {
 };
 
 pub const OperatorPrecendenceMap = std.StaticStringMap(OperatorPrecedence).initComptime(.{
+    // 	lexer.TTilde: PrecedenceHighest,
+    // lexer.TAsterisk: PrecedenceProduct,
+    // lexer.TDivide: PrecedenceProduct,
+    // lexer.TPlus: PrecedenceSum,
+    // lexer.TMinus: PrecedenceSum,
+    // lexer.TEqual: PrecedenceComparison,
+    // lexer.TNotEqualBang: PrecedenceComparison,
+    // lexer.TNotEqualArrow: PrecedenceComparison,
+    // lexer.TLessThan: PrecedenceComparison,
+    // lexer.TLessThanEqual: PrecedenceComparison,
+    // lexer.TGreaterThan: PrecedenceComparison,
+    // lexer.TGreaterThanEqual: PrecedenceComparison,
+    // lexer.TNot: PrecedenceNot,
+    // lexer.TAnd: PrecedenceAnd,
+    // lexer.TAll: PrecedenceOtherLogicals,
+    // lexer.TAny: PrecedenceOtherLogicals,
+    // lexer.TBetween: PrecedenceOtherLogicals,
+    // lexer.TIn: PrecedenceOtherLogicals,
+    // lexer.TLike: PrecedenceOtherLogicals,
+    // lexer.TOr: PrecedenceOtherLogicals,
+    // lexer.TSome: PrecedenceOtherLogicals,
+    // lexer.TPlusEqual: PrecedenceOtherLogicals,
+    // lexer.TMinusEqual: PrecedenceOtherLogicals,
+    // lexer.TMultiplyEqual: PrecedenceOtherLogicals,
+    // lexer.TDivideEqual: PrecedenceOtherLogicals,
+    // lexer.TPercentEqual: PrecedenceOtherLogicals,
+    // lexer.TAndEqual: PrecedenceOtherLogicals,
+    // lexer.TOrEqual: PrecedenceOtherLogicals,
+    // lexer.TCaretEqual: PrecedenceOtherLogicals,
+
     .{ "with", .with },
     .{ "exec", .exec },
     .{ "select", .select },

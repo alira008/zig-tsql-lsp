@@ -54,10 +54,8 @@ pub fn parse(self: *Self) std.ArrayList(query.Statement) {
 }
 
 fn peek_precedence(self: *Self) OperatorPrecedence {
-    return switch (self.peek_token.token) {
-        .plus => 1,
-        else => 0,
-    };
+    _ = self;
+    return .lowest;
 }
 
 fn next_token(self: *Self) void {
@@ -161,7 +159,7 @@ fn parse_select(self: *Self) ParserError!query.Select {
     while (self.peek_token_is_many(&[_]TokenKind{ .identifier, .string_literal, .number, .local_variable, .asterisk, .left_paren })) {
         self.next_token();
 
-        const column = try self.parse_expression(1);
+        const column = try self.parse_expression(.lowest);
         try select_items.append(column);
         if (!self.peek_token_is(TokenKind.comma)) {
             break;
@@ -172,7 +170,7 @@ fn parse_select(self: *Self) ParserError!query.Select {
     try self.expect_peek(.from);
     self.next_token();
 
-    const table = try self.parse_expression(1);
+    const table = try self.parse_expression(.lowest);
     body.table = table;
     body.select_items = try select_items.toOwnedSlice();
 
@@ -184,7 +182,7 @@ fn parse_expression(self: *Self, precedence: OperatorPrecedence) ParserError!*Ex
     // or if it is a prefix operator
     var left_expression = try self.parse_prefix_expression();
 
-    while (precedence < self.peek_precedence()) {
+    while (@intFromEnum(precedence) < @intFromEnum(self.peek_precedence())) {
         // move to the next token
         self.next_token();
 
@@ -274,9 +272,9 @@ test "parse select statement" {
     const lexer = Lexer.new(input);
     var parser = Self.init(allocator, lexer);
     const parsed_sql = parser.parse();
-    if (parser.errors().len > 0) {
+    if (parser.error_context.errors.items.len > 0) {
         std.debug.print("errors: \n", .{});
-        for (parser.errors()) |err| {
+        for (parser.error_context.errors.items) |err| {
             std.debug.print("\t{s}\n", .{err});
         }
     }
