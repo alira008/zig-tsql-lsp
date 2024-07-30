@@ -1,7 +1,13 @@
 const std = @import("std");
 const Expression = @import("expression.zig").Expression;
+pub const Span = struct { line: u32, col: u32 };
+pub const Comment = struct { text: []u8 };
+pub const KeywordKind = enum { single, multi };
+pub const Keyword = union(KeywordKind) { single: Keyword, multi: []Keyword };
 
 pub const Select = struct {
+    start: Span,
+    end: Span,
     distinct: bool,
     top: ?Top,
     select_items: []*Expression,
@@ -12,6 +18,8 @@ pub const Select = struct {
     order_by: ?OrderBy,
 
     pub const Top = struct {
+        start: Span,
+        end: Span,
         with_ties: bool,
         percent: bool,
         quantity: *Expression,
