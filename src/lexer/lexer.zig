@@ -1,7 +1,8 @@
 const std = @import("std");
-const Token = @import("token.zig");
-const TokenType = Token.TokenType;
 const expectEqualDeep = std.testing.expectEqualDeep;
+pub const Token = @import("token.zig");
+pub const TokenType = Token.TokenType;
+pub const TokenKind = Token.TokenKind;
 
 pub const LexerError = error{OutOfMemory};
 
@@ -71,6 +72,7 @@ fn read_identifier(self: *Self) []const u8 {
     while (is_letter(self.peek_char()) and self.peek_char() != 0) {
         self.read_char();
     }
+
     return self.input[position .. self.position + 1];
 }
 
@@ -102,6 +104,7 @@ fn read_quoted_identifier(self: *Self) []const u8 {
     }
     // skip the quote character
     self.read_char();
+
     return self.input[position..self.position];
 }
 
@@ -130,27 +133,6 @@ fn read_local_variable(self: *Self) []const u8 {
     return self.input[position .. self.position + 1];
 }
 
-fn read_comment(self: *Self) []const u8 {
-    // skip -
-    self.read_char();
-    // check the first position that isn't a space
-    var position = self.position;
-    var last_position = self.position;
-    var start_found = false;
-    while (self.peek_char() != '\n' and self.peek_char() != 0) {
-        self.read_char();
-        if (!std.ascii.isWhitespace(self.char) and !start_found) {
-            start_found = true;
-            position = self.position;
-        }
-        if (!std.ascii.isWhitespace(self.char)) {
-            last_position = self.position;
-        }
-    }
-
-    return self.input[position .. last_position + 1];
-}
-
 fn skip_whitespace(self: *Self) void {
     while (std.ascii.isWhitespace(self.char)) {
         self.read_char();
@@ -161,34 +143,22 @@ pub fn next_token(self: *Self) Token {
     self.skip_whitespace();
 
     const start_pos = Token.Position.init(self.line, self.column);
-    const tok: TokenType = switch (self.char) {
+    const tok: Token.TokenType = switch (self.char) {
         '#' => .sharp,
+        '~' => .tilde,
         '.' => .period,
         ';' => .semicolon,
         '(' => .left_paren,
         ')' => .right_paren,
         '+' => .plus,
-        '-' => blk: {
-            if (self.peek_char() == '-') {
-                self.read_char();
-                const comment = self.read_comment();
-                break :blk .{ .comment = comment };
-            } else {
-                break :blk .minus;
-            }
-        },
+        '-' => .minus,
+        '/' => .forward_slash,
         '\'' => blk: {
             const word = self.read_string_literal();
-            // read closing '\''
-            self.read_char();
-
             break :blk .{ .string_literal = word };
         },
         '[' => blk: {
             const word = self.read_quoted_identifier();
-            // read closing ']'
-            self.read_char();
-
             break :blk .{ .quoted_identifier = word };
         },
         '@' => blk: {
@@ -198,8 +168,10 @@ pub fn next_token(self: *Self) Token {
         ',' => .comma,
         '<' => blk: {
             if (self.peek_char() == '=') {
+                self.read_char();
                 break :blk .less_than_equal;
             } else if (self.peek_char() == '>') {
+                self.read_char();
                 break :blk .not_equal_arrow;
             } else {
                 break :blk .less_than;
@@ -207,6 +179,7 @@ pub fn next_token(self: *Self) Token {
         },
         '>' => blk: {
             if (self.peek_char() == '=') {
+                self.read_char();
                 break :blk .greater_than_equal;
             } else {
                 break :blk .greater_than;
@@ -214,10 +187,9 @@ pub fn next_token(self: *Self) Token {
         },
         '=' => .equal,
         '*' => .asterisk,
-        '/' => .forward_slash,
-        '%' => .percent,
         '!' => blk: {
             if (self.peek_char() == '=') {
+                self.read_char();
                 break :blk .not_equal_bang;
             } else {
                 break :blk .illegal;
@@ -225,7 +197,7 @@ pub fn next_token(self: *Self) Token {
         },
         'a'...'z', 'A'...'Z', '_' => blk: {
             const ident = self.read_identifier();
-            if (Token.keyword(ident)) |tok| {
+            if (Token.TokenType.keyword(ident)) |tok| {
                 break :blk tok;
             }
             break :blk .{ .identifier = ident };
@@ -251,7 +223,27 @@ pub fn next_token(self: *Self) Token {
 }
 
 test "basic select test" {
-    const input = "seLECt * from table; -- yessir ";
+    const input = "seLECt * from table;";
+    const tests = [_]Token{
+        .{ .token = .select, .start_pos = .{ .line = 1, .column = 1 }, .end_pos = .{ .line = 1, .column = 6 } },
+        .{ .token = .asterisk, .start_pos = .{ .line = 1, .column = 8 }, .end_pos = .{ .line = 1, .column = 8 } },
+        .{ .token = .from, .start_pos = .{ .line = 1, .column = 10 }, .end_pos = .{ .line = 1, .column = 13 } },
+        .{ .token = .{ .identifier = "table" }, .start_pos = .{ .line = 1, .column = 15 }, .end_pos = .{ .line = 1, .column = 19 } },
+        .{ .token = .semicolon, .start_pos = .{ .line = 1, .column = 20 }, .end_pos = .{ .line = 1, .column = 20 } },
+    };
+
+    var lexer = Self.new(input);
+
+    for (0..tests.len) |i| {
+        const tok = lexer.next_token();
+        const test_token = tests[i];
+
+        try expectEqualDeep(test_token, tok);
+    }
+}
+
+test "basic token test" {
+    const input = "seLECt 2.3435 [hello] @yes 'test' / * -  !=  +;";
     const tests = [_]Token{
         .{
             .token = .select,
@@ -259,28 +251,98 @@ test "basic select test" {
             .end_pos = .{ .line = 1, .column = 6 },
         },
         .{
-            .token = .asterisk,
+            .token = .{ .number = 2.3435 },
             .start_pos = .{ .line = 1, .column = 8 },
-            .end_pos = .{ .line = 1, .column = 8 },
-        },
-        .{
-            .token = .from,
-            .start_pos = .{ .line = 1, .column = 10 },
             .end_pos = .{ .line = 1, .column = 13 },
         },
         .{
-            .token = .{ .identifier = "table" },
+            .token = .{ .quoted_identifier = "hello" },
             .start_pos = .{ .line = 1, .column = 15 },
-            .end_pos = .{ .line = 1, .column = 19 },
+            .end_pos = .{ .line = 1, .column = 21 },
+        },
+        .{
+            .token = .{ .local_variable = "yes" },
+            .start_pos = .{ .line = 1, .column = 23 },
+            .end_pos = .{ .line = 1, .column = 26 },
+        },
+        .{
+            .token = .{ .string_literal = "test" },
+            .start_pos = .{ .line = 1, .column = 28 },
+            .end_pos = .{ .line = 1, .column = 33 },
+        },
+        .{
+            .token = .forward_slash,
+            .start_pos = .{ .line = 1, .column = 35 },
+            .end_pos = .{ .line = 1, .column = 35 },
+        },
+        .{
+            .token = .asterisk,
+            .start_pos = .{ .line = 1, .column = 37 },
+            .end_pos = .{ .line = 1, .column = 37 },
+        },
+        .{
+            .token = .minus,
+            .start_pos = .{ .line = 1, .column = 39 },
+            .end_pos = .{ .line = 1, .column = 39 },
+        },
+        .{
+            .token = .not_equal_bang,
+            .start_pos = .{ .line = 1, .column = 42 },
+            .end_pos = .{ .line = 1, .column = 43 },
+        },
+        .{
+            .token = .plus,
+            .start_pos = .{ .line = 1, .column = 46 },
+            .end_pos = .{ .line = 1, .column = 46 },
         },
         .{
             .token = .semicolon,
-            .start_pos = .{ .line = 1, .column = 20 },
-            .end_pos = .{ .line = 1, .column = 20 },
+            .start_pos = .{ .line = 1, .column = 47 },
+            .end_pos = .{ .line = 1, .column = 47 },
+        },
+    };
+
+    var lexer = Self.new(input);
+
+    for (0..tests.len) |i| {
+        const tok = lexer.next_token();
+        const test_token = tests[i];
+
+        try expectEqualDeep(test_token, tok);
+    }
+}
+
+test "some keywords test" {
+    const input = "seLECt and numeric where row in";
+    const tests = [_]Token{
+        .{
+            .token = .select,
+            .start_pos = .{ .line = 1, .column = 1 },
+            .end_pos = .{ .line = 1, .column = 6 },
         },
         .{
-            .token = .{ .comment = "yessir" },
-            .start_pos = .{ .line = 1, .column = 22 },
+            .token = .and_,
+            .start_pos = .{ .line = 1, .column = 8 },
+            .end_pos = .{ .line = 1, .column = 10 },
+        },
+        .{
+            .token = .numeric,
+            .start_pos = .{ .line = 1, .column = 12 },
+            .end_pos = .{ .line = 1, .column = 18 },
+        },
+        .{
+            .token = .where,
+            .start_pos = .{ .line = 1, .column = 20 },
+            .end_pos = .{ .line = 1, .column = 24 },
+        },
+        .{
+            .token = .row,
+            .start_pos = .{ .line = 1, .column = 26 },
+            .end_pos = .{ .line = 1, .column = 28 },
+        },
+        .{
+            .token = .in,
+            .start_pos = .{ .line = 1, .column = 30 },
             .end_pos = .{ .line = 1, .column = 31 },
         },
     };

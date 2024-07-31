@@ -1,5 +1,5 @@
-const Token = @import("token.zig");
 const std = @import("std");
+const Token = @import("lexer").Token;
 
 pub const ParserError = error{ UnexpectedToken, NotImplemented, OutOfMemory };
 

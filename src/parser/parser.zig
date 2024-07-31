@@ -1,12 +1,16 @@
 const std = @import("std");
-const query = @import("ast/query.zig");
-const expression = @import("ast/expression.zig");
-const Lexer = @import("lexer.zig");
-const LexerError = @import("lexer.zig").LexerError;
-const Token = @import("token.zig");
-const ErrorContext = @import("errors.zig").ErrorContext;
-const ParserError = @import("errors.zig").ParserError;
-const Expression = expression.Expression;
+const ast = @import("ast");
+const Lexer = @import("lexer");
+const query = ast.query;
+const errors = @import("errors.zig");
+const OperatorPrecedence = @import("precedence.zig").OperatorPrecedence;
+const getPrecedence = @import("precedence.zig").getPrecedence;
+const LexerError = Lexer.LexerError;
+const Token = Lexer.Token;
+const TokenKind = Token.TokenKind;
+const ErrorContext = errors.ErrorContext;
+const ParserError = errors.ParserError;
+const Expression = ast.expression.Expression;
 
 const Self = @This();
 
@@ -49,24 +53,13 @@ pub fn parse(self: *Self) std.ArrayList(query.Statement) {
     return list;
 }
 
-pub fn errors(self: Self) [][]u8 {
-    return self.error_context.errors.items;
-}
-
-fn peek_precedence(self: *Self) u8 {
-    return switch (self.peek_token.token) {
-        .plus => 1,
-        else => 0,
-    };
+fn peek_precedence(self: *Self) OperatorPrecedence {
+    return getPrecedence(self.peek_token.token);
 }
 
 fn next_token(self: *Self) void {
     self.current_token = self.peek_token;
-    self.peek_token = self.lexer.next_token() catch |err| {
-        switch (err) {
-            LexerError.OutOfMemory => std.debug.panic("Out of memory in lexer", .{}),
-        }
-    };
+    self.peek_token = self.lexer.next_token();
 }
 
 fn debug_print_current_token(self: Self) void {
@@ -77,15 +70,15 @@ fn debug_print_peek_token(self: Self) void {
     std.debug.print("peek_token: {s}\n", .{self.peek_token.token.toString()});
 }
 
-fn peek_token_is(self: *Self, expected: Token.TokenKind) bool {
-    return @as(Token.TokenKind, self.peek_token.token) == expected;
+fn peek_token_is(self: *Self, expected: TokenKind) bool {
+    return @as(TokenKind, self.peek_token.token) == expected;
 }
 
-fn current_token_is(self: *Self, expected: Token.TokenKind) bool {
-    return @as(Token.TokenKind, self.current_token.token) == expected;
+fn current_token_is(self: *Self, expected: TokenKind) bool {
+    return @as(TokenKind, self.current_token.token) == expected;
 }
 
-fn expect_current(self: *Self, expected: Token.TokenKind) ParserError!void {
+fn expect_current(self: *Self, expected: TokenKind) ParserError!void {
     if (self.current_token_is(expected)) {
         return self.next_token();
     } else {
@@ -93,7 +86,7 @@ fn expect_current(self: *Self, expected: Token.TokenKind) ParserError!void {
     }
 }
 
-fn expect_peek(self: *Self, expected: Token.TokenKind) ParserError!void {
+fn expect_peek(self: *Self, expected: TokenKind) ParserError!void {
     if (self.peek_token_is(expected)) {
         return self.next_token();
     } else {
@@ -101,7 +94,7 @@ fn expect_peek(self: *Self, expected: Token.TokenKind) ParserError!void {
     }
 }
 
-fn expect_peek_many(self: *Self, expected: []const Token.TokenKind) ParserError!void {
+fn expect_peek_many(self: *Self, expected: []const TokenKind) ParserError!void {
     for (expected) |expected_token| {
         if (self.peek_token_is(expected_token)) {
             return self.next_token();
@@ -110,7 +103,7 @@ fn expect_peek_many(self: *Self, expected: []const Token.TokenKind) ParserError!
     return self.error_context.addUnexpectedTokenMany(&self.peek_token, expected);
 }
 
-fn peek_token_is_many(self: *Self, expected: []const Token.TokenKind) bool {
+fn peek_token_is_many(self: *Self, expected: []const TokenKind) bool {
     for (expected) |expected_token| {
         if (self.peek_token_is(expected_token)) {
             return true;
@@ -161,13 +154,13 @@ fn parse_select(self: *Self) ParserError!query.Select {
     };
 
     // parse the columns
-    body.select_items = std.ArrayList(*Expression).init(self.allocator);
-    while (self.peek_token_is_many(&[_]Token.TokenKind{ .identifier, .string_literal, .number, .local_variable, .asterisk, .left_paren })) {
+    var select_items = std.ArrayList(*Expression).init(self.allocator);
+    while (self.peek_token_is_many(&[_]TokenKind{ .identifier, .string_literal, .number, .local_variable, .asterisk, .left_paren })) {
         self.next_token();
 
-        const column = try self.parse_expression(1);
-        try body.select_items.append(column);
-        if (!self.peek_token_is(Token.TokenKind.comma)) {
+        const column = try self.parse_expression(.lowest);
+        try select_items.append(column);
+        if (!self.peek_token_is(TokenKind.comma)) {
             break;
         }
         self.next_token();
@@ -176,18 +169,19 @@ fn parse_select(self: *Self) ParserError!query.Select {
     try self.expect_peek(.from);
     self.next_token();
 
-    const table = try self.parse_expression(1);
+    const table = try self.parse_expression(.lowest);
     body.table = table;
+    body.select_items = try select_items.toOwnedSlice();
 
     return body;
 }
 
-fn parse_expression(self: *Self, precedence: u8) ParserError!*Expression {
+fn parse_expression(self: *Self, precedence: OperatorPrecedence) ParserError!*Expression {
     // check if the current token is an identifier
     // or if it is a prefix operator
     var left_expression = try self.parse_prefix_expression();
 
-    while (precedence < self.peek_precedence()) {
+    while (@intFromEnum(precedence) < @intFromEnum(self.peek_precedence())) {
         // move to the next token
         self.next_token();
 
@@ -204,19 +198,19 @@ fn parse_prefix_expression(self: *Self) ParserError!*Expression {
     return switch (self.current_token.token) {
         .identifier, .number, .local_variable, .string_literal, .quoted_identifier => expr: {
             if (self.current_token.token == .identifier) {
-                expr.* = Expression{ .identifier = self.current_token.token.identifier };
+                expr.* = Expression{ .identifier = try self.allocator.dupe(u8, self.current_token.token.identifier) };
                 break :expr expr;
             } else if (self.current_token.token == .number) {
                 expr.* = Expression{ .number_literal = self.current_token.token.number };
                 break :expr expr;
             } else if (self.current_token.token == .local_variable) {
-                expr.* = Expression{ .local_variable_identifier = self.current_token.token.local_variable };
+                expr.* = Expression{ .local_variable_identifier = try self.allocator.dupe(u8, self.current_token.token.local_variable) };
                 break :expr expr;
             } else if (self.current_token.token == .string_literal) {
-                expr.* = Expression{ .string_literal = self.current_token.token.string_literal };
+                expr.* = Expression{ .string_literal = try self.allocator.dupe(u8, self.current_token.token.string_literal) };
                 break :expr expr;
             } else if (self.current_token.token == .quoted_identifier) {
-                expr.* = Expression{ .quote_identifier = self.current_token.token.quoted_identifier };
+                expr.* = Expression{ .quote_identifier = try self.allocator.dupe(u8, self.current_token.token.quoted_identifier) };
                 break :expr expr;
             }
 
@@ -269,17 +263,17 @@ test "parse select statement" {
     var statements = std.ArrayList(query.Statement).init(allocator);
     try statements.append(
         query.Statement{
-            .select = .{ .select_items = select_items, .table = table, .where = null },
+            .select = .{ .select_items = try select_items.toOwnedSlice(), .table = table, .where = null },
         },
     );
     const input = "select hello, hello from testtable";
 
-    const lexer = Lexer.new(allocator, input);
+    const lexer = Lexer.new(input);
     var parser = Self.init(allocator, lexer);
     const parsed_sql = parser.parse();
-    if (parser.errors().len > 0) {
+    if (parser.error_context.errors.items.len > 0) {
         std.debug.print("errors: \n", .{});
-        for (parser.errors()) |err| {
+        for (parser.error_context.errors.items) |err| {
             std.debug.print("\t{s}\n", .{err});
         }
     }
