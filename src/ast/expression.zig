@@ -1,5 +1,6 @@
 const std = @import("std");
 const query = @import("query.zig");
+const Span = @import("ast.zig").Span;
 
 pub const Operators = enum {
     Case,
@@ -7,19 +8,51 @@ pub const Operators = enum {
 };
 
 pub const Expression = union(enum) {
-    number_literal: f64,
-    string_literal: []u8,
-    quote_identifier: []u8,
-    bool_literal: bool,
-    identifier: []u8,
-    local_variable_identifier: []u8,
-    expr_list: []*Expression,
+    number_literal: struct {
+        value: f64,
+        start: Span = undefined,
+        end: Span = undefined,
+    },
+    string_literal: struct {
+        value: []u8,
+        start: Span = undefined,
+        end: Span = undefined,
+    },
+    quote_identifier: struct {
+        value: []u8,
+        start: Span = undefined,
+        end: Span = undefined,
+    },
+    bool_literal: struct {
+        value: bool,
+        start: Span = undefined,
+        end: Span = undefined,
+    },
+    identifier: struct {
+        value: []u8,
+        start: Span = undefined,
+        end: Span = undefined,
+    },
+    local_variable_identifier: struct {
+        value: []u8,
+        start: Span = undefined,
+        end: Span = undefined,
+    },
+    expr_list: struct {
+        expressions: []*Expression,
+        start: Span = undefined,
+        end: Span = undefined,
+    },
     binary_expression: struct {
+        start: Span = undefined,
+        end: Span = undefined,
         left: *Expression,
         right: *Expression,
         op: BinaryOperator,
     },
     unary_expression: struct {
+        start: Span = undefined,
+        end: Span = undefined,
         expr: *Expression,
         op: UnaryOperator,
     },

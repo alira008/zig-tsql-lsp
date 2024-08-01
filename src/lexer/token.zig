@@ -1,21 +1,23 @@
 const std = @import("std");
+const Span = @import("ast").Span;
 
 token: TokenType,
-start_pos: Position,
-end_pos: Position,
+start_pos: Span,
+end_pos: Span,
 
 pub const TokenKind = enum {
     identifier,
     quoted_identifier,
     local_variable,
     string_literal,
+    comment,
     number,
 
     illegal,
     eof,
 
     sharp,
-    tilde,
+    mod,
     period,
     semicolon,
     left_bracket,
@@ -113,11 +115,12 @@ pub const TokenKind = enum {
             .quoted_identifier => "quoted_identifier",
             .local_variable => "local_variable",
             .string_literal => "string_literal",
+            .comment => "comment",
             .number => "number",
             .illegal => "illegal",
             .eof => "eof",
             .sharp => "sharp",
-            .tilde => "tilde",
+            .mod => "mod",
             .period => "period",
             .semicolon => "semicolon",
             .left_bracket => "left_bracket",
@@ -213,13 +216,14 @@ pub const TokenType = union(TokenKind) {
     quoted_identifier: []const u8,
     local_variable: []const u8,
     string_literal: []const u8,
+    comment: []const u8,
     number: f64,
 
     illegal,
     eof,
 
     sharp,
-    tilde,
+    mod,
     period,
     semicolon,
     left_bracket,
@@ -309,99 +313,18 @@ pub const TokenType = union(TokenKind) {
     numeric,
     varchar,
 
-    // keyword types
-    const map = std.StaticStringMap(TokenType).initComptime(.{
-        .{ "with", .with },
-        .{ "exec", .exec },
-        .{ "select", .select },
-        .{ "distinct", .distinct },
-        .{ "top", .top },
-        .{ "from", .from },
-        .{ "where", .where },
-        .{ "insert", .insert },
-        .{ "update", .update },
-        .{ "delete", .delete },
-        .{ "create", .create },
-        .{ "alter", .alter },
-        .{ "drop", .drop },
-        .{ "declare", .declare },
-        .{ "set", .set },
-        .{ "cast", .cast },
-        .{ "as", .as },
-        .{ "asc", .asc },
-        .{ "desc", .desc },
-        .{ "and", .and_ },
-        .{ "or", .or_ },
-        .{ "order", .order },
-        .{ "by", .by },
-        .{ "over", .over },
-        .{ "partition", .partition },
-        .{ "range", .range },
-        .{ "offset", .offset },
-        .{ "fetch", .fetch },
-        .{ "row", .row },
-        .{ "rows", .rows },
-        .{ "first", .first },
-        .{ "next", .next },
-        .{ "only", .only },
-        .{ "percent", .percent },
-        .{ "ties", .ties },
-        .{ "full", .full },
-        .{ "left", .left },
-        .{ "right", .right },
-        .{ "inner", .inner },
-        .{ "outer", .outer },
-        .{ "join", .join },
-        .{ "on", .on },
-        .{ "having", .having },
-        .{ "between", .between },
-        .{ "following", .following },
-        .{ "preceding", .preceding },
-        .{ "unbounded", .unbounded },
-        .{ "current", .current },
-        .{ "not", .not },
-        .{ "like", .like },
-        .{ "all", .all },
-        .{ "exists", .exists },
-        .{ "any", .any },
-        .{ "in", .in },
-        .{ "some", .some },
-        .{ "int", .int },
-        .{ "bigint", .bigint },
-        .{ "tinyint", .tinyint },
-        .{ "smallint", .smallint },
-        .{ "bit", .bit },
-        .{ "float", .float },
-        .{ "real", .real },
-        .{ "date", .date },
-        .{ "datetime", .datetime },
-        .{ "time", .time },
-        .{ "decimal", .decimal },
-        .{ "numeric", .numeric },
-        .{ "varchar", .varchar },
-    });
-
-    pub fn keyword(ident: []const u8) ?TokenType {
-        var buf = [_]u8{0} ** 20;
-        if (ident.len >= buf.len) {
-            return null;
-        }
-        const lower_ident = std.ascii.lowerString(&buf, ident);
-
-        return map.get(lower_ident);
-    }
-
     pub fn toString(self: TokenType) []const u8 {
         return switch (self) {
             .identifier => self.identifier,
             .quoted_identifier => self.quoted_identifier,
             .local_variable => self.local_variable,
             .string_literal => self.string_literal,
+            .comment => self.comment,
             .number => "number",
             .illegal => "illegal",
             .eof => "eof",
             .sharp => "sharp",
-            .tilde => "tilde",
+            .mod => "mod",
             .period => "period",
             .semicolon => "semicolon",
             .left_bracket => "left_bracket",
@@ -491,12 +414,84 @@ pub const TokenType = union(TokenKind) {
         };
     }
 };
+// keyword types
+const map = std.StaticStringMap(TokenType).initComptime(.{
+    .{ "with", .with },
+    .{ "exec", .exec },
+    .{ "select", .select },
+    .{ "distinct", .distinct },
+    .{ "top", .top },
+    .{ "from", .from },
+    .{ "where", .where },
+    .{ "insert", .insert },
+    .{ "update", .update },
+    .{ "delete", .delete },
+    .{ "create", .create },
+    .{ "alter", .alter },
+    .{ "drop", .drop },
+    .{ "declare", .declare },
+    .{ "set", .set },
+    .{ "cast", .cast },
+    .{ "as", .as },
+    .{ "asc", .asc },
+    .{ "desc", .desc },
+    .{ "and", .and_ },
+    .{ "or", .or_ },
+    .{ "order", .order },
+    .{ "by", .by },
+    .{ "over", .over },
+    .{ "partition", .partition },
+    .{ "range", .range },
+    .{ "offset", .offset },
+    .{ "fetch", .fetch },
+    .{ "row", .row },
+    .{ "rows", .rows },
+    .{ "first", .first },
+    .{ "next", .next },
+    .{ "only", .only },
+    .{ "percent", .percent },
+    .{ "ties", .ties },
+    .{ "full", .full },
+    .{ "left", .left },
+    .{ "right", .right },
+    .{ "inner", .inner },
+    .{ "outer", .outer },
+    .{ "join", .join },
+    .{ "on", .on },
+    .{ "having", .having },
+    .{ "between", .between },
+    .{ "following", .following },
+    .{ "preceding", .preceding },
+    .{ "unbounded", .unbounded },
+    .{ "current", .current },
+    .{ "not", .not },
+    .{ "like", .like },
+    .{ "all", .all },
+    .{ "exists", .exists },
+    .{ "any", .any },
+    .{ "in", .in },
+    .{ "some", .some },
+    .{ "int", .int },
+    .{ "bigint", .bigint },
+    .{ "tinyint", .tinyint },
+    .{ "smallint", .smallint },
+    .{ "bit", .bit },
+    .{ "float", .float },
+    .{ "real", .real },
+    .{ "date", .date },
+    .{ "datetime", .datetime },
+    .{ "time", .time },
+    .{ "decimal", .decimal },
+    .{ "numeric", .numeric },
+    .{ "varchar", .varchar },
+});
 
-pub const Position = struct {
-    line: usize,
-    column: usize,
-
-    pub fn init(line: usize, column: usize) Position {
-        return .{ .line = line, .column = column };
+pub fn keyword(ident: []const u8) ?TokenType {
+    var buf = [_]u8{0} ** 20;
+    if (ident.len >= buf.len) {
+        return null;
     }
-};
+    const lower_ident = std.ascii.lowerString(&buf, ident);
+
+    return map.get(lower_ident);
+}

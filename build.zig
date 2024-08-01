@@ -10,6 +10,7 @@ pub fn build(b: *std.Build) void {
     const parser = b.addModule("parser", .{ .root_source_file = b.path("src/parser/parser.zig") });
     parser.addImport("lexer", lexer);
     parser.addImport("ast", ast);
+    lexer.addImport("ast", ast);
 
     const exe = b.addExecutable(.{
         .name = "sql-lsp",
@@ -58,6 +59,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    lexer_tests.root_module.addImport("ast", ast);
     const run_lexer_tests = b.addRunArtifact(lexer_tests);
 
     const test_step = b.step("test", "Run unit tests");

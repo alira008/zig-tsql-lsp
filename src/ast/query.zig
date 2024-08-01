@@ -1,33 +1,50 @@
 const std = @import("std");
+const Span = @import("ast.zig").Span;
 const Expression = @import("expression.zig").Expression;
-pub const Span = struct { line: u32, col: u32 };
 pub const Comment = struct { text: []u8 };
+pub const SymbolKind = enum { left_paren, right_paren };
+pub const Symbol = union(SymbolKind) {
+    left_paren: struct { start: Span, end: Span },
+    right_paren: struct { start: Span, end: Span },
+};
 pub const KeywordKind = enum { single, multi };
-pub const Keyword = union(KeywordKind) { single: Keyword, multi: []Keyword };
+pub const Keyword = struct { start: Span, end: Span, text: []u8 };
+pub const KeywordType = union(KeywordKind) { single: Keyword, multi: []Keyword };
 
 pub const Select = struct {
-    start: Span,
-    end: Span,
-    distinct: bool,
-    top: ?Top,
-    select_items: []*Expression,
-    table: ?Table,
-    where: ?*Expression,
-    having: ?*Expression,
-    group_by: ?[]*Expression,
-    order_by: ?OrderBy,
+    start: Span = undefined,
+    end: Span = undefined,
+
+    select: KeywordType = undefined,
+    distinct: ?KeywordType = null,
+    all: ?KeywordType = null,
+    top: ?Top = null,
+    select_clause: SelectClause,
+    table: ?Table = null,
+    // where: ?*Expression,
+    // having: ?*Expression,
+    // group_by: ?[]*Expression,
+    // order_by: ?OrderBy,
+    pub const SelectClause = struct {
+        start: Span = undefined,
+        end: Span = undefined,
+
+        items: []*Expression,
+    };
 
     pub const Top = struct {
-        start: Span,
-        end: Span,
-        with_ties: bool,
-        percent: bool,
-        quantity: *Expression,
+        start: Span = undefined,
+        end: Span = undefined,
+
+        top: KeywordType = undefined,
+        with_ties: ?KeywordType = null,
+        percent: ?KeywordType = null,
+        quantity: *Expression = undefined,
     };
 
     pub const Table = struct {
-        source: TableSource,
-        joins: ?[]TableJoin,
+        source: TableSource = undefined,
+        joins: ?[]TableJoin = undefined,
     };
 
     pub const TableSourceType = enum { table, derived, table_valued_function };

@@ -1,5 +1,6 @@
 const std = @import("std");
 const expectEqualDeep = std.testing.expectEqualDeep;
+const Span = @import("ast").Span;
 pub const Token = @import("token.zig");
 pub const TokenType = Token.TokenType;
 pub const TokenKind = Token.TokenKind;
@@ -23,10 +24,6 @@ pub fn new(input: []const u8) Self {
     lexer.read_char();
 
     return lexer;
-}
-
-pub fn location(self: *Self) Token.Location {
-    return .{ .line = self.line, .column = self.column };
 }
 
 fn peek_char(self: *Self) u8 {
@@ -133,6 +130,27 @@ fn read_local_variable(self: *Self) []const u8 {
     return self.input[position .. self.position + 1];
 }
 
+fn read_comment(self: *Self) []const u8 {
+    // skip -
+    self.read_char();
+    // check the first position that isn't a space
+    var position = self.position;
+    var last_position = self.position;
+    var start_found = false;
+    while (self.peek_char() != '\n' and self.peek_char() != 0) {
+        self.read_char();
+        if (!std.ascii.isWhitespace(self.char) and !start_found) {
+            start_found = true;
+            position = self.position;
+        }
+        if (!std.ascii.isWhitespace(self.char)) {
+            last_position = self.position;
+        }
+    }
+
+    return self.input[position .. last_position + 1];
+}
+
 fn skip_whitespace(self: *Self) void {
     while (std.ascii.isWhitespace(self.char)) {
         self.read_char();
@@ -142,16 +160,24 @@ fn skip_whitespace(self: *Self) void {
 pub fn next_token(self: *Self) Token {
     self.skip_whitespace();
 
-    const start_pos = Token.Position.init(self.line, self.column);
+    const start_pos = Span.init(self.line, self.column);
     const tok: Token.TokenType = switch (self.char) {
         '#' => .sharp,
-        '~' => .tilde,
+        '%' => .mod,
         '.' => .period,
         ';' => .semicolon,
         '(' => .left_paren,
         ')' => .right_paren,
         '+' => .plus,
-        '-' => .minus,
+        '-' => blk: {
+            if (self.peek_char() == '=') {
+                self.read_char();
+                const comment = self.read_comment();
+                break :blk .{ .comment = comment };
+            } else {
+                break :blk .minus;
+            }
+        },
         '/' => .forward_slash,
         '\'' => blk: {
             const word = self.read_string_literal();
@@ -197,7 +223,7 @@ pub fn next_token(self: *Self) Token {
         },
         'a'...'z', 'A'...'Z', '_' => blk: {
             const ident = self.read_identifier();
-            if (Token.TokenType.keyword(ident)) |tok| {
+            if (Token.keyword(ident)) |tok| {
                 break :blk tok;
             }
             break :blk .{ .identifier = ident };
@@ -208,7 +234,7 @@ pub fn next_token(self: *Self) Token {
             const number = std.fmt.parseFloat(f64, num_str) catch return .{
                 .token = .illegal,
                 .start_pos = start_pos,
-                .end_pos = Token.Position.init(self.line, self.column),
+                .end_pos = Span.init(self.line, self.column),
             };
             break :blk .{ .number = number };
         },
@@ -216,7 +242,7 @@ pub fn next_token(self: *Self) Token {
         else => .illegal,
     };
 
-    const end_pos = Token.Position.init(self.line, self.column);
+    const end_pos = Span.init(self.line, self.column);
     self.read_char();
 
     return .{ .token = tok, .start_pos = start_pos, .end_pos = end_pos };
