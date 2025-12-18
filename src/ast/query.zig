@@ -1,5 +1,5 @@
 const std = @import("std");
-const Span = @import("ast.zig").Span;
+const Span = @import("lexer").Span;
 const Expression = @import("expression.zig").Expression;
 pub const Comment = struct { text: []u8 };
 pub const SymbolKind = enum { left_paren, right_paren };

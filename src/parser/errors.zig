@@ -23,7 +23,11 @@ pub const ErrorContext = struct {
         for (0..1024) |i| {
             scratch_buf[i] = 0;
         }
-        return .{ .allocator = allocator, .errors = std.ArrayList([]u8).init(allocator), .expected_tokens = expected_tokens };
+        return .{
+            .allocator = allocator,
+            .errors = std.ArrayList([]u8).initCapacity(allocator, 4),
+            .expected_tokens = expected_tokens,
+        };
     }
 
     pub fn deinit(self: *Self) void {

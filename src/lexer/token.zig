@@ -1,5 +1,5 @@
 const std = @import("std");
-const Span = @import("ast").Span;
+const Span = @import("span.zig");
 
 token: TokenType,
 start_pos: Span,

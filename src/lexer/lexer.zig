@@ -1,6 +1,6 @@
 const std = @import("std");
 const expectEqualDeep = std.testing.expectEqualDeep;
-const Span = @import("ast").Span;
+const Span = @import("span.zig");
 pub const Token = @import("token.zig");
 pub const TokenType = Token.TokenType;
 pub const TokenKind = Token.TokenKind;
