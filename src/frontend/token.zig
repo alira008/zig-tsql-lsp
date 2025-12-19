@@ -4,8 +4,7 @@ pub const Span = struct { start: Location, end: Location };
 pub const Token = struct {
     tag: Tag,
     lexeme: []const u8,
-    start_pos: Span,
-    end_pos: Span,
+    span: Span,
 };
 
 pub const Tag = enum {

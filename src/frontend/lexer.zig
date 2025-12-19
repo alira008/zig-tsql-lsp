@@ -23,16 +23,16 @@ pub const Lexer = struct {
         lexer.skipWhitespace();
         const start = Location{ .line = lexer.line, .column = lexer.column };
         const tok = switch (lexer.char) {
-            ',' => lexer.makeToken(',', .comma, start),
-            '(' => lexer.makeToken('(', .left_paren, start),
-            ')' => lexer.makeToken(')', .right_paren, start),
-            '=' => lexer.makeToken('=', .equal, start),
+            ',' => lexer.makeToken(",", .comma, start),
+            '(' => lexer.makeToken("(", .left_paren, start),
+            ')' => lexer.makeToken(")", .right_paren, start),
+            '=' => lexer.makeToken("=", .equal, start),
             '!' => blk: {
                 if (lexer.peek() == '=') {
                     lexer.readChar();
                     break :blk lexer.makeToken("!=", .not_equal_bang, start);
                 } else {
-                    break :blk lexer.makeToken('!', .illegal, start);
+                    break :blk lexer.makeToken("!", .illegal, start);
                 }
             },
             '<' => blk: {
@@ -43,15 +43,15 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("<>", .not_equal_arrow, start);
                 } else {
-                    break :blk lexer.makeToken('<', .illegal, start);
+                    break :blk lexer.makeToken("<", .illegal, start);
                 }
             },
-            '<' => blk: {
+            '>' => blk: {
                 if (lexer.peek() == '=') {
                     lexer.readChar();
                     break :blk lexer.makeToken(">=", .greater_than_equal, start);
                 } else {
-                    break :blk lexer.makeToken('<', .illegal, start);
+                    break :blk lexer.makeToken(">", .illegal, start);
                 }
             },
             '+' => blk: {
@@ -59,7 +59,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("+=", .plus_equal, start);
                 } else {
-                    break :blk lexer.makeToken('<', .illegal, start);
+                    break :blk lexer.makeToken("+", .illegal, start);
                 }
             },
             '-' => blk: {
@@ -70,7 +70,7 @@ pub const Lexer = struct {
                     const slice = lexer.readCommentLine();
                     break :blk lexer.makeToken(slice, .comment_line, start);
                 } else {
-                    break :blk lexer.makeToken('<', .illegal, start);
+                    break :blk lexer.makeToken("-", .illegal, start);
                 }
             },
             '/' => blk: {
@@ -78,7 +78,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("/=", .divide_equal, start);
                 } else {
-                    break :blk lexer.makeToken('/', .forward_slash, start);
+                    break :blk lexer.makeToken("/", .forward_slash, start);
                 }
             },
             '*' => blk: {
@@ -86,7 +86,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("*=", .multiply_equal, start);
                 } else {
-                    break :blk lexer.makeToken('*', .asterisk, start);
+                    break :blk lexer.makeToken("*", .asterisk, start);
                 }
             },
             '%' => blk: {
@@ -94,7 +94,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("%=", .mod_equal, start);
                 } else {
-                    break :blk lexer.makeToken('*', .mod, start);
+                    break :blk lexer.makeToken("*", .mod, start);
                 }
             },
             '^' => blk: {
@@ -102,7 +102,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("^=", .caret_equal, start);
                 } else {
-                    break :blk lexer.makeToken('^', .illegal, start);
+                    break :blk lexer.makeToken("^", .illegal, start);
                 }
             },
             '|' => blk: {
@@ -110,7 +110,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("|=", .pipe_equal, start);
                 } else {
-                    break :blk lexer.makeToken('|', .pipe, start);
+                    break :blk lexer.makeToken("|", .pipe, start);
                 }
             },
             '&' => blk: {
@@ -118,11 +118,11 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("&=", .ampersand_equal, start);
                 } else {
-                    break :blk lexer.makeToken('&', .ampersand, start);
+                    break :blk lexer.makeToken("&", .ampersand, start);
                 }
             },
-            '.' => lexer.makeToken('.', .period, start),
-            ';' => lexer.makeToken(';', .semicolon, start),
+            '.' => lexer.makeToken(".", .period, start),
+            ';' => lexer.makeToken(";", .semicolon, start),
             '[' => blk: {
                 const slice = lexer.readQuotedIdentifier();
                 break :blk lexer.makeToken(slice, .quoted_identifier, start);
@@ -131,24 +131,26 @@ pub const Lexer = struct {
                 const slice = lexer.readQuotedString();
                 break :blk lexer.makeToken(slice, .string_literal, start);
             },
-            '~' => lexer.makeToken('~', .tilde, start),
+            '~' => lexer.makeToken("~", .tilde, start),
             '@' => blk: {
-                const slice = lexer.readLocalVariable();
+                lexer.readChar();
+                const slice = lexer.readIdentifier();
                 break :blk lexer.makeToken(slice, .local_variable, start);
             },
             '0'...'9' => blk: {
                 const slice = lexer.readNumber();
                 break :blk lexer.makeToken(slice, .number_literal, start);
             },
-            _ => blk: {
-                if (std.ascii.isAlphabetic(lexer.ch) or lexer.ch == '_') {
+            else => blk: {
+                if (std.ascii.isAlphabetic(lexer.char) or lexer.char == '_') {
                     const slice = lexer.readIdentifier();
                     if (token.keyword(slice)) |tag| {
                         break :blk lexer.makeToken(slice, tag, start);
                     }
                     break :blk lexer.makeToken(slice, .identifier, start);
                 }
-                break :blk lexer.makeToken('^', .illegal, start);
+                const slice = lexer.source[lexer.current .. lexer.current + 1];
+                break :blk lexer.makeToken(slice, .illegal, start);
             },
         };
 
@@ -156,14 +158,16 @@ pub const Lexer = struct {
         return tok;
     }
 
-    fn makeToken(lexer: *Lexer, lexeme: []const u8, tag: Tag, start: Location, len: usize) Token {
+    fn makeToken(lexer: *Lexer, lexeme: []const u8, tag: Tag, start: Location) Token {
         return Token{
             .tag = tag,
             .lexeme = lexeme,
-            .start_pos = start,
-            .end_pos = Location{
-                .line = lexer.line,
-                .column = lexer.column + len,
+            .span = Span{
+                .start = start,
+                .end = Location{
+                    .line = lexer.line,
+                    .column = lexer.column,
+                },
             },
         };
     }
@@ -274,7 +278,7 @@ pub const Lexer = struct {
         if (lexer.peek() == '.') {
             lexer.readChar();
 
-            while (lexer.isDigit(lexer.peek())) {
+            while (std.ascii.isDigit(lexer.peek())) {
                 lexer.readChar();
             }
         }
@@ -288,7 +292,7 @@ pub const Lexer = struct {
     fn readIdentifier(lexer: *Lexer) []const u8 {
         const start = lexer.current;
         var peekChar = lexer.peek();
-        while (std.ascii.isAlphabetic(peekChar) || peekChar == '_') {
+        while (std.ascii.isAlphabetic(peekChar) or peekChar == '_') {
             lexer.readChar();
             peekChar = lexer.peek();
         }
@@ -299,3 +303,59 @@ pub const Lexer = struct {
         return lexer.source[start .. lexer.current + 1];
     }
 };
+
+test "basic select test" {
+    const input = "seLECt * from table;";
+    const expectEqualDeep = std.testing.expectEqualDeep;
+    const tests = [_]Token{
+        .{
+            .tag = .kw_select,
+            .lexeme = "seLECt",
+            .span = .{
+                .start = .{ .line = 0, .column = 1 },
+                .end = .{ .line = 0, .column = 6 },
+            },
+        },
+        .{
+            .tag = .asterisk,
+            .lexeme = "*",
+            .span = .{
+                .start = .{ .line = 0, .column = 8 },
+                .end = .{ .line = 0, .column = 8 },
+            },
+        },
+        .{
+            .tag = .kw_from,
+            .lexeme = "from",
+            .span = .{
+                .start = .{ .line = 0, .column = 10 },
+                .end = .{ .line = 0, .column = 13 },
+            },
+        },
+        .{
+            .tag = .identifier,
+            .lexeme = "table",
+            .span = .{
+                .start = .{ .line = 0, .column = 15 },
+                .end = .{ .line = 0, .column = 19 },
+            },
+        },
+        .{
+            .tag = .semicolon,
+            .lexeme = ";",
+            .span = .{
+                .start = .{ .line = 0, .column = 20 },
+                .end = .{ .line = 0, .column = 20 },
+            },
+        },
+    };
+
+    var lexer = Lexer.init(input);
+
+    for (0..tests.len) |i| {
+        const tok = lexer.next_token();
+        const test_token = tests[i];
+
+        try expectEqualDeep(test_token, tok);
+    }
+}
