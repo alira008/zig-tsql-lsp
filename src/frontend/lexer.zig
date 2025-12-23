@@ -1,5 +1,6 @@
 const std = @import("std");
 const token = @import("token.zig");
+const Dialect = @import("dialect/dialect.zig").Dialect;
 const Location = token.Location;
 const Span = token.Span;
 const Tag = token.Tag;
@@ -12,9 +13,10 @@ pub const Lexer = struct {
     read: usize = 0,
     current: usize = 0,
     char: u8 = 0,
+    dialect: Dialect,
 
-    pub fn init(source: []const u8) Lexer {
-        var lexer = Lexer{ .source = source };
+    pub fn init(source: []const u8, dialect: Dialect) Lexer {
+        var lexer = Lexer{ .source = source, .dialect = dialect };
         lexer.readChar();
         return lexer;
     }
@@ -23,6 +25,14 @@ pub const Lexer = struct {
         lexer.skipWhitespace();
         const start = Location{ .line = lexer.line, .column = lexer.column };
         const tok = switch (lexer.char) {
+            ':' => blk: {
+                if (lexer.peek() == ':' and lexer.dialect == .postgres) {
+                    lexer.readChar();
+                    break :blk lexer.makeToken("::", .double_colon, start);
+                } else {
+                    break :blk lexer.makeToken(":", .illegal, start);
+                }
+            },
             ',' => lexer.makeToken(",", .comma, start),
             '(' => lexer.makeToken("(", .left_paren, start),
             ')' => lexer.makeToken(")", .right_paren, start),
@@ -144,7 +154,7 @@ pub const Lexer = struct {
             else => blk: {
                 if (std.ascii.isAlphabetic(lexer.char) or lexer.char == '_') {
                     const slice = lexer.readIdentifier();
-                    if (token.keyword(slice)) |tag| {
+                    if (token.keyword(slice, lexer.dialect)) |tag| {
                         break :blk lexer.makeToken(slice, tag, start);
                     }
                     break :blk lexer.makeToken(slice, .identifier, start);
@@ -350,7 +360,7 @@ test "basic select test" {
         },
     };
 
-    var lexer = Lexer.init(input);
+    var lexer = Lexer.init(input, Dialect.sqlserver);
 
     for (0..tests.len) |i| {
         const tok = lexer.next_token();

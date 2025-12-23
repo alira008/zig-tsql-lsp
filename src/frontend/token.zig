@@ -1,4 +1,5 @@
 const std = @import("std");
+const dialect = @import("dialect/dialect.zig");
 pub const Location = struct { line: usize, column: usize };
 pub const Span = struct { start: Location, end: Location };
 pub const Token = struct {
@@ -47,6 +48,7 @@ pub const Tag = enum {
     asterisk,
     forward_slash,
     tilde,
+    double_colon, // postgres
 
     // Keywords
     kw_with,
@@ -54,6 +56,7 @@ pub const Tag = enum {
     kw_select,
     kw_distinct,
     kw_top,
+    kw_limit, // postgres, mysql, sqlite
     kw_from,
     kw_where,
     kw_insert,
@@ -71,6 +74,7 @@ pub const Tag = enum {
     kw_and_,
     kw_or_,
     kw_order,
+    kw_group,
     kw_by,
     kw_over,
     kw_partition,
@@ -117,6 +121,42 @@ pub const Tag = enum {
     kw_decimal,
     kw_numeric,
     kw_varchar,
+    kw_is,
+    kw_null,
+    kw_true,
+    kw_false,
+    kw_case,
+    kw_when,
+    kw_then,
+    kw_else,
+    kw_end,
+    kw_filter,
+    kw_window,
+    // postgres
+    kw_returning,
+    kw_ilike,
+    kw_similar,
+    kw_distinct_on,
+    kw_lateral,
+    kw_recursive,
+    kw_boolean,
+    kw_text,
+    kw_uuid,
+    kw_json,
+    kw_jsonb,
+    kw_serial,
+    kw_bigserial,
+    kw_enum,
+    // sqlite
+    kw_replace,
+    kw_conflict,
+    kw_abort,
+    kw_fail,
+    kw_ignore,
+    kw_restrict,
+    kw_without,
+    kw_integer,
+    kw_blob,
 
     pub fn toString(tag: Tag) []const u8 {
         return switch (tag) {
@@ -157,6 +197,7 @@ pub const Tag = enum {
             .asterisk => "asterisk",
             .forward_slash => "forward_slash",
             .tilde => "tilde",
+            .double_colon => "double_colon",
             .kw_with => "kw_with",
             .kw_exec => "kw_exec",
             .kw_select => "kw_select",
@@ -179,6 +220,7 @@ pub const Tag = enum {
             .kw_and_ => "kw_and",
             .kw_or_ => "kw_or",
             .kw_order => "kw_order",
+            .kw_group => "kw_group",
             .kw_by => "kw_by",
             .kw_over => "kw_over",
             .kw_partition => "kw_partition",
@@ -225,6 +267,38 @@ pub const Tag = enum {
             .kw_decimal => "kw_decimal",
             .kw_numeric => "kw_numeric",
             .kw_varchar => "kw_varchar",
+            .kw_is => "kw_is",
+            .kw_null => "kw_null",
+            .kw_true => "kw_true",
+            .kw_false => "kw_false",
+            .kw_case => "kw_case",
+            .kw_when => "kw_when",
+            .kw_then => "kw_then",
+            .kw_else => "kw_else",
+            .kw_end => "kw_end",
+            .kw_returning => "kw_returning",
+            .kw_ilike => "kw_ilike",
+            .kw_similar => "kw_similar",
+            .kw_distinct_on => "kw_distinct_on",
+            .kw_lateral => "kw_lateral",
+            .kw_recursive => "kw_recursive",
+            .kw_boolean => "kw_boolean",
+            .kw_text => "kw_text",
+            .kw_uuid => "kw_uuid",
+            .kw_json => "kw_json",
+            .kw_jsonb => "kw_jsonb",
+            .kw_serial => "kw_serial",
+            .kw_bigserial => "kw_bigserial",
+            .kw_enum => "kw_enum",
+            .kw_replace => "kw_replace",
+            .kw_conflict => "kw_conflict",
+            .kw_abort => "kw_abort",
+            .kw_fail => "kw_fail",
+            .kw_ignore => "kw_ignore",
+            .kw_restrict => "kw_restrict",
+            .kw_without => "kw_without",
+            .kw_integer => "kw_integer",
+            .kw_blob => "kw_blob",
         };
     }
 };
@@ -253,6 +327,7 @@ const map = std.StaticStringMap(Tag).initComptime(.{
     .{ "and", .kw_and_ },
     .{ "or", .kw_or_ },
     .{ "order", .kw_order },
+    .{ "group", .kw_group },
     .{ "by", .kw_by },
     .{ "over", .kw_over },
     .{ "partition", .kw_partition },
@@ -299,14 +374,53 @@ const map = std.StaticStringMap(Tag).initComptime(.{
     .{ "decimal", .kw_decimal },
     .{ "numeric", .kw_numeric },
     .{ "varchar", .kw_varchar },
+    .{ "is", .kw_is },
+    .{ "null", .kw_null },
+    .{ "true", .kw_true },
+    .{ "false", .kw_false },
+    .{ "case", .kw_case },
+    .{ "when", .kw_when },
+    .{ "then", .kw_then },
+    .{ "else", .kw_else },
+    .{ "end", .kw_end },
+    .{ "returning", .kw_returning },
+    .{ "ilike", .kw_ilike },
+    .{ "similar", .kw_similar },
+    .{ "distinct_on", .kw_distinct_on },
+    .{ "lateral", .kw_lateral },
+    .{ "recursive", .kw_recursive },
+    .{ "boolean", .kw_boolean },
+    .{ "text", .kw_text },
+    .{ "uuid", .kw_uuid },
+    .{ "json", .kw_json },
+    .{ "jsonb", .kw_jsonb },
+    .{ "serial", .kw_serial },
+    .{ "bigserial", .kw_bigserial },
+    .{ "enum", .kw_enum },
+    .{ "replace", .kw_replace },
+    .{ "conflict", .kw_conflict },
+    .{ "abort", .kw_abort },
+    .{ "fail", .kw_fail },
+    .{ "ignore", .kw_ignore },
+    .{ "restrict", .kw_restrict },
+    .{ "without", .kw_without },
+    .{ "integer", .kw_integer },
+    .{ "blob", .kw_blob },
 });
 
-pub fn keyword(ident: []const u8) ?Tag {
+pub fn keyword(ident: []const u8, sql_dialect: dialect.Dialect) ?Tag {
     var buf = [_]u8{0} ** 20;
     if (ident.len >= buf.len) {
         return null;
     }
     const lower_ident = std.ascii.lowerString(&buf, ident);
+    if (dialect.core_keywords.get(lower_ident)) |tag| {
+        return tag;
+    }
 
-    return map.get(lower_ident);
+    return switch (sql_dialect) {
+        .sqlserver => dialect.sqlserver.sqlserver_keywords.get(lower_ident),
+        .sqlite => dialect.sqlite.sqlite_keywords.get(lower_ident),
+        .postgres => dialect.postgres.postgres_keywords.get(lower_ident),
+    };
 }

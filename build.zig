@@ -35,14 +35,14 @@ pub fn build(b: *std.Build) void {
             },
         },
     );
-    // const frontend = b.addModule(
-    //     "frontend",
-    //     .{
-    //         .root_source_file = b.path("src/frontend/root.zig"),
-    //         .target = target,
-    //         .optimize = optimize,
-    //     },
-    // );
+    const frontend = b.addModule(
+        "frontend",
+        .{
+            .root_source_file = b.path("src/frontend/root.zig"),
+            .target = target,
+            .optimize = optimize,
+        },
+    );
 
     const exe = b.addExecutable(.{
         .name = "sql-lsp",
@@ -113,11 +113,7 @@ pub fn build(b: *std.Build) void {
     _ = run_lexer_tests;
 
     const frontend_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/frontend/root.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = frontend,
     });
     const run_frontend_tests = b.addRunArtifact(frontend_tests);
 
