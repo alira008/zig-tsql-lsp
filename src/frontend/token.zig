@@ -1,5 +1,5 @@
 const std = @import("std");
-const dialect = @import("dialect/dialect.zig");
+const dialect = @import("dialect.zig");
 pub const Location = struct { line: usize, column: usize };
 pub const Span = struct { start: Location, end: Location };
 pub const Token = struct {

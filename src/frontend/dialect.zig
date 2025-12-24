@@ -1,9 +1,5 @@
 const std = @import("std");
-// const token = @import("root").token;
-const token = @import("../token.zig");
-pub const sqlserver = @import("sqlserver.zig");
-pub const sqlite = @import("sqlite.zig");
-pub const postgres = @import("postgres.zig");
+const token = @import("token.zig");
 
 pub const Dialect = enum {
     postgres,
@@ -92,4 +88,44 @@ pub const core_keywords = std.StaticStringMap(token.Tag).initComptime(.{
     .{ "null", .kw_null },
     .{ "true", .kw_true },
     .{ "false", .kw_false },
+});
+
+pub const postgres_keywords = std.StaticStringMap(token.Tag).initComptime(.{
+    .{ "returning", .kw_returning },
+    .{ "lateral", .kw_lateral },
+    .{ "recursive", .kw_recursive },
+    .{ "ilike", .kw_ilike },
+    .{ "similar", .kw_similar },
+    .{ "text", .kw_text },
+    .{ "uuid", .kw_uuid },
+    .{ "json", .kw_json },
+    .{ "jsonb", .kw_jsonb },
+    .{ "serial", .kw_serial },
+    .{ "bigserial", .kw_bigserial },
+    .{ "enum", .kw_enum },
+});
+
+pub const sqlite_keywords = std.StaticStringMap(token.Tag).initComptime(.{
+    .{ "blob", .kw_blob },
+    .{ "integer", .kw_integer },
+    .{ "text", .kw_text },
+    .{ "datetime", .kw_datetime },
+    .{ "replace", .kw_replace },
+    .{ "conflict", .kw_conflict },
+    .{ "abort", .kw_abort },
+    .{ "fail", .kw_fail },
+    .{ "ignore", .kw_ignore },
+    .{ "restrict", .kw_restrict },
+    .{ "without", .kw_without },
+});
+
+pub const sqlserver_keywords = std.StaticStringMap(token.Tag).initComptime(.{
+    .{ "exec", .kw_exec },
+    .{ "top", .kw_top },
+    .{ "declare", .kw_declare },
+    .{ "set", .kw_set },
+    .{ "percent", .kw_percent },
+    .{ "ties", .kw_ties },
+    .{ "bit", .kw_bit },
+    .{ "datetime", .kw_datetime },
 });

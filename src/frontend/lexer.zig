@@ -1,6 +1,6 @@
 const std = @import("std");
 const token = @import("token.zig");
-const Dialect = @import("dialect/dialect.zig").Dialect;
+const Dialect = @import("dialect.zig").Dialect;
 const Location = token.Location;
 const Span = token.Span;
 const Tag = token.Tag;
@@ -13,20 +13,19 @@ pub const Lexer = struct {
     read: usize = 0,
     current: usize = 0,
     char: u8 = 0,
-    dialect: Dialect,
 
-    pub fn init(source: []const u8, dialect: Dialect) Lexer {
-        var lexer = Lexer{ .source = source, .dialect = dialect };
+    pub fn init(source: []const u8) Lexer {
+        var lexer = Lexer{ .source = source };
         lexer.readChar();
         return lexer;
     }
 
-    pub fn next_token(lexer: *Lexer) Token {
+    pub fn next_token(lexer: *Lexer, dialect: Dialect) Token {
         lexer.skipWhitespace();
         const start = Location{ .line = lexer.line, .column = lexer.column };
         const tok = switch (lexer.char) {
             ':' => blk: {
-                if (lexer.peek() == ':' and lexer.dialect == .postgres) {
+                if (lexer.peek() == ':' and dialect == .postgres) {
                     lexer.readChar();
                     break :blk lexer.makeToken("::", .double_colon, start);
                 } else {
@@ -154,7 +153,7 @@ pub const Lexer = struct {
             else => blk: {
                 if (std.ascii.isAlphabetic(lexer.char) or lexer.char == '_') {
                     const slice = lexer.readIdentifier();
-                    if (token.keyword(slice, lexer.dialect)) |tag| {
+                    if (token.keyword(slice, dialect)) |tag| {
                         break :blk lexer.makeToken(slice, tag, start);
                     }
                     break :blk lexer.makeToken(slice, .identifier, start);
@@ -360,10 +359,10 @@ test "basic select test" {
         },
     };
 
-    var lexer = Lexer.init(input, Dialect.sqlserver);
+    var lexer = Lexer.init(input);
 
     for (0..tests.len) |i| {
-        const tok = lexer.next_token();
+        const tok = lexer.next_token(Dialect.sqlserver);
         const test_token = tests[i];
 
         try expectEqualDeep(test_token, tok);
