@@ -1,15 +1,12 @@
 const std = @import("std");
 const token = @import("token.zig");
 const Dialect = @import("dialect.zig").Dialect;
-const Location = token.Location;
 const Span = token.Span;
 const Tag = token.Tag;
 const Token = token.Token;
 
 pub const Lexer = struct {
     source: []const u8,
-    line: usize = 0,
-    column: usize = 0,
     read: usize = 0,
     current: usize = 0,
     char: u8 = 0,
@@ -22,7 +19,7 @@ pub const Lexer = struct {
 
     pub fn next_token(lexer: *Lexer, dialect: Dialect) Token {
         lexer.skipWhitespace();
-        const start = Location{ .line = lexer.line, .column = lexer.column };
+        const start = lexer.current;
         const tok = switch (lexer.char) {
             ':' => blk: {
                 if (lexer.peek() == ':' and dialect == .postgres) {
@@ -167,17 +164,11 @@ pub const Lexer = struct {
         return tok;
     }
 
-    fn makeToken(lexer: *Lexer, lexeme: []const u8, tag: Tag, start: Location) Token {
+    fn makeToken(lexer: *Lexer, lexeme: []const u8, tag: Tag, start: usize) Token {
         return Token{
             .tag = tag,
             .lexeme = lexeme,
-            .span = Span{
-                .start = start,
-                .end = Location{
-                    .line = lexer.line,
-                    .column = lexer.column,
-                },
-            },
+            .span = Span.fromOffsets(start, lexer.current),
         };
     }
 
@@ -186,15 +177,6 @@ pub const Lexer = struct {
             lexer.char = 0;
         } else {
             lexer.char = lexer.source[lexer.read];
-        }
-
-        if (lexer.char == '\n') {
-            lexer.line += 1;
-            lexer.column = 0;
-        } else if (lexer.char == '\t') {
-            lexer.column += 4;
-        } else {
-            lexer.column += 1;
         }
 
         lexer.current = lexer.read;
@@ -321,40 +303,40 @@ test "basic select test" {
             .tag = .kw_select,
             .lexeme = "seLECt",
             .span = .{
-                .start = .{ .line = 0, .column = 1 },
-                .end = .{ .line = 0, .column = 6 },
+                .start = 0,
+                .end = 5,
             },
         },
         .{
             .tag = .asterisk,
             .lexeme = "*",
             .span = .{
-                .start = .{ .line = 0, .column = 8 },
-                .end = .{ .line = 0, .column = 8 },
+                .start = 7,
+                .end = 7,
             },
         },
         .{
             .tag = .kw_from,
             .lexeme = "from",
             .span = .{
-                .start = .{ .line = 0, .column = 10 },
-                .end = .{ .line = 0, .column = 13 },
+                .start = 9,
+                .end = 12,
             },
         },
         .{
             .tag = .identifier,
             .lexeme = "table",
             .span = .{
-                .start = .{ .line = 0, .column = 15 },
-                .end = .{ .line = 0, .column = 19 },
+                .start = 14,
+                .end = 18,
             },
         },
         .{
             .tag = .semicolon,
             .lexeme = ";",
             .span = .{
-                .start = .{ .line = 0, .column = 20 },
-                .end = .{ .line = 0, .column = 20 },
+                .start = 19,
+                .end = 19,
             },
         },
     };

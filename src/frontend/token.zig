@@ -1,7 +1,44 @@
 const std = @import("std");
 const dialect = @import("dialect.zig");
-pub const Location = struct { line: usize, column: usize };
-pub const Span = struct { start: Location, end: Location };
+
+pub const Span = struct {
+    start: usize,
+    end: usize,
+
+    pub const global: Span = .{ .start = 0, .end = 0 };
+
+    pub fn fromOffsets(start: usize, end: usize) Span {
+        return .{ .start = start, .end = end };
+    }
+
+    pub fn merge(a: Span, b: Span) Span {
+        return .{
+            .start = @min(a.start, b.start),
+            .end = @max(a.end, b.end),
+        };
+    }
+
+    pub fn containsOffset(self: Span, offset: usize) bool {
+        return offset >= self.start and offset < self.end;
+    }
+
+    pub fn containsSpan(self: Span, other: Span) bool {
+        return other.start >= self.start and other.end <= self.end;
+    }
+
+    pub fn sliceFrom(self: Span, source: []const u8) []const u8 {
+        return source[self.start..self.end];
+    }
+
+    pub fn startAt(self: Span, start: usize) Span {
+        return .{ .start = start, .end = self.end };
+    }
+
+    pub fn endAt(self: Span, end: usize) Span {
+        return .{ .start = self.start, .end = end };
+    }
+};
+
 pub const Token = struct {
     tag: Tag,
     lexeme: []const u8,
@@ -419,8 +456,8 @@ pub fn keyword(ident: []const u8, sql_dialect: dialect.Dialect) ?Tag {
     }
 
     return switch (sql_dialect) {
-        .sqlserver => dialect.sqlserver.sqlserver_keywords.get(lower_ident),
-        .sqlite => dialect.sqlite.sqlite_keywords.get(lower_ident),
-        .postgres => dialect.postgres.postgres_keywords.get(lower_ident),
+        .sqlserver => dialect.sqlserver_keywords.get(lower_ident),
+        .sqlite => dialect.sqlite_keywords.get(lower_ident),
+        .postgres => dialect.postgres_keywords.get(lower_ident),
     };
 }
