@@ -1,6 +1,5 @@
 const std = @import("std");
 const token = @import("token.zig");
-const Dialect = @import("dialect.zig").Dialect;
 const Span = token.Span;
 const Tag = token.Tag;
 const Token = token.Token;
@@ -21,7 +20,7 @@ pub const Lexer = struct {
         return lexer;
     }
 
-    pub fn next_token(lexer: *Lexer, dialect: Dialect) Error!Token {
+    pub fn next_token(lexer: *Lexer) Error!Token {
         lexer.skipWhitespace();
         const start = lexer.current;
         if (lexer.current >= lexer.source.len) {
@@ -29,7 +28,7 @@ pub const Lexer = struct {
         }
         const tok = switch (lexer.char) {
             ':' => blk: {
-                if (lexer.peek() == ':' and dialect == .postgres) {
+                if (lexer.peek() == ':') {
                     lexer.readChar();
                     break :blk lexer.makeToken("::", .double_colon, start);
                 } else {
@@ -369,7 +368,7 @@ test "basic select test" {
     var lexer = Lexer.init(input);
 
     for (0..tests.len) |i| {
-        const tok = lexer.next_token(Dialect.sqlserver);
+        const tok = lexer.next_token();
         const test_token = tests[i];
 
         try expectEqualDeep(test_token, tok);
