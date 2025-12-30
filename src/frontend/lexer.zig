@@ -296,7 +296,7 @@ pub const Lexer = struct {
 };
 
 test "basic select test" {
-    const input = "seLECt * from table;";
+    const input = "seLECt *, potato from table;";
     const expectEqualDeep = std.testing.expectEqualDeep;
     const tests = [_]Token{
         .{
@@ -316,27 +316,43 @@ test "basic select test" {
             },
         },
         .{
+            .tag = .comma,
+            .lexeme = ",",
+            .span = .{
+                .start = 8,
+                .end = 8,
+            },
+        },
+        .{
+            .tag = .identifier,
+            .lexeme = "potato",
+            .span = .{
+                .start = 10,
+                .end = 15,
+            },
+        },
+        .{
             .tag = .kw_from,
             .lexeme = "from",
             .span = .{
-                .start = 9,
-                .end = 12,
+                .start = 17,
+                .end = 20,
             },
         },
         .{
             .tag = .identifier,
             .lexeme = "table",
             .span = .{
-                .start = 14,
-                .end = 18,
+                .start = 22,
+                .end = 26,
             },
         },
         .{
             .tag = .semicolon,
             .lexeme = ";",
             .span = .{
-                .start = 19,
-                .end = 19,
+                .start = 27,
+                .end = 27,
             },
         },
     };
