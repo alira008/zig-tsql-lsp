@@ -24,6 +24,9 @@ pub const Lexer = struct {
     pub fn next_token(lexer: *Lexer, dialect: Dialect) Error!Token {
         lexer.skipWhitespace();
         const start = lexer.current;
+        if (lexer.current >= lexer.source.len) {
+            return lexer.makeToken("", .eof, start);
+        }
         const tok = switch (lexer.char) {
             ':' => blk: {
                 if (lexer.peek() == ':' and dialect == .postgres) {
@@ -351,6 +354,14 @@ test "basic select test" {
             .span = .{
                 .start = 27,
                 .end = 27,
+            },
+        },
+        .{
+            .tag = .eof,
+            .lexeme = "",
+            .span = .{
+                .start = 28,
+                .end = 28,
             },
         },
     };
