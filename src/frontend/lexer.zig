@@ -147,14 +147,14 @@ pub const Lexer = struct {
                 const slice = lexer.readNumber();
                 break :blk lexer.makeToken(slice, .number_literal, start);
             },
-            else => blk: {
-                if (std.ascii.isAlphabetic(lexer.char) or lexer.char == '_') {
-                    const slice = lexer.readIdentifier();
-                    if (token.keyword(slice, dialect)) |tag| {
-                        break :blk lexer.makeToken(slice, tag, start);
-                    }
-                    break :blk lexer.makeToken(slice, .identifier, start);
+            'a'...'z', 'A'...'Z', '_' => blk: {
+                const slice = lexer.readIdentifier();
+                if (token.keyword(slice, dialect)) |tag| {
+                    break :blk lexer.makeToken(slice, tag, start);
                 }
+                break :blk lexer.makeToken(slice, .identifier, start);
+            },
+            else => blk: {
                 const slice = lexer.source[lexer.current .. lexer.current + 1];
                 break :blk lexer.makeToken(slice, .illegal, start);
             },
