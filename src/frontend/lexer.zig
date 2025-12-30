@@ -5,6 +5,10 @@ const Span = token.Span;
 const Tag = token.Tag;
 const Token = token.Token;
 
+pub const Error = error{
+    UnexpectedCharacter,
+};
+
 pub const Lexer = struct {
     source: []const u8,
     read: usize = 0,
@@ -17,7 +21,7 @@ pub const Lexer = struct {
         return lexer;
     }
 
-    pub fn next_token(lexer: *Lexer, dialect: Dialect) Token {
+    pub fn next_token(lexer: *Lexer, dialect: Dialect) Error!Token {
         lexer.skipWhitespace();
         const start = lexer.current;
         const tok = switch (lexer.char) {
@@ -26,7 +30,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("::", .double_colon, start);
                 } else {
-                    break :blk lexer.makeToken(":", .illegal, start);
+                    break :blk Error.UnexpectedCharacter;
                 }
             },
             ',' => lexer.makeToken(",", .comma, start),
@@ -49,7 +53,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("<>", .not_equal_arrow, start);
                 } else {
-                    break :blk lexer.makeToken("<", .illegal, start);
+                    break :blk lexer.makeToken("<", .less_than, start);
                 }
             },
             '>' => blk: {
@@ -57,7 +61,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken(">=", .greater_than_equal, start);
                 } else {
-                    break :blk lexer.makeToken(">", .illegal, start);
+                    break :blk lexer.makeToken(">", .greater_than, start);
                 }
             },
             '+' => blk: {
@@ -65,7 +69,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("+=", .plus_equal, start);
                 } else {
-                    break :blk lexer.makeToken("+", .illegal, start);
+                    break :blk lexer.makeToken("+", .plus, start);
                 }
             },
             '-' => blk: {
@@ -76,7 +80,7 @@ pub const Lexer = struct {
                     const slice = lexer.readCommentLine();
                     break :blk lexer.makeToken(slice, .comment_line, start);
                 } else {
-                    break :blk lexer.makeToken("-", .illegal, start);
+                    break :blk lexer.makeToken("-", .minus, start);
                 }
             },
             '/' => blk: {
@@ -100,7 +104,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("%=", .mod_equal, start);
                 } else {
-                    break :blk lexer.makeToken("*", .mod, start);
+                    break :blk lexer.makeToken("%", .mod, start);
                 }
             },
             '^' => blk: {
@@ -108,7 +112,7 @@ pub const Lexer = struct {
                     lexer.readChar();
                     break :blk lexer.makeToken("^=", .caret_equal, start);
                 } else {
-                    break :blk lexer.makeToken("^", .illegal, start);
+                    break :blk Error.UnexpectedCharacter;
                 }
             },
             '|' => blk: {
@@ -149,15 +153,9 @@ pub const Lexer = struct {
             },
             'a'...'z', 'A'...'Z', '_' => blk: {
                 const slice = lexer.readIdentifier();
-                if (token.keyword(slice, dialect)) |tag| {
-                    break :blk lexer.makeToken(slice, tag, start);
-                }
                 break :blk lexer.makeToken(slice, .identifier, start);
             },
-            else => blk: {
-                const slice = lexer.source[lexer.current .. lexer.current + 1];
-                break :blk lexer.makeToken(slice, .illegal, start);
-            },
+            else => Error.UnexpectedCharacter,
         };
 
         lexer.readChar();
@@ -300,7 +298,7 @@ test "basic select test" {
     const expectEqualDeep = std.testing.expectEqualDeep;
     const tests = [_]Token{
         .{
-            .tag = .kw_select,
+            .tag = .identifier,
             .lexeme = "seLECt",
             .span = .{
                 .start = 0,
@@ -332,7 +330,7 @@ test "basic select test" {
             },
         },
         .{
-            .tag = .kw_from,
+            .tag = .identifier,
             .lexeme = "from",
             .span = .{
                 .start = 17,
