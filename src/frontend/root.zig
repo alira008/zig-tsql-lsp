@@ -6,4 +6,5 @@ pub const dialect = @import("dialect.zig");
 
 test {
     _ = lexer;
+    _ = parser;
 }
