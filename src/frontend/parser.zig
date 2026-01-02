@@ -88,21 +88,17 @@ pub const Parser = struct {
         return false;
     }
 
-    fn consumeKeyword(parser: *Parser, kw: dial.Keyword) !ast.Keyword {
-        const current_token = parser.current_token;
-        if (current_token.tag != .identifier) {
-            return Error.ExpectedKeyword;
-        }
-        const maybeKw = dial.lookupKeyword(current_token.lexeme, parser.dialect);
-        if (maybeKw != kw) {
-            return Error.ExpectedKeyword;
-        }
-        try parser.nextToken();
+    fn consumeKeyword(parser: *Parser, tag: tok.Tag) !ast.Keyword {
+        const span = parser.current_token.span;
+        if (dial.Keyword.fromTokenTagKeyword(tag)) |keyword| {
+            try parser.nextToken();
 
-        return ast.Keyword{
-            .tag = kw,
-            .span = current_token.span,
-        };
+            return ast.Keyword{
+                .tag = keyword,
+                .span = span,
+            };
+        }
+        return Error.ExpectedKeyword;
     }
 
     fn consumeToken(parser: *Parser, tag: tok.Tag) !tok.Token {
@@ -127,21 +123,17 @@ pub const Parser = struct {
         return Error.UnexpectedToken;
     }
 
-    fn maybeKeyword(parser: *Parser, kw: dial.Keyword) ?ast.Keyword {
-        const current_token = parser.current_token;
-        if (current_token.tag != .identifier) {
-            return null;
-        }
-        const maybeKw = dial.lookupKeyword(current_token.lexeme, parser.dialect);
-        if (maybeKw != kw) {
-            return null;
-        }
-        try parser.nextToken();
+    fn maybeKeyword(parser: *Parser, tag: dial.Keyword) ?ast.Keyword {
+        const span = parser.current_token.span;
+        if (dial.Keyword.fromTokenTagKeyword(tag)) |keyword| {
+            try parser.nextToken();
 
-        return ast.Keyword{
-            .tag = kw,
-            .span = current_token.span,
-        };
+            return ast.Keyword{
+                .tag = keyword,
+                .span = span,
+            };
+        }
+        return null;
     }
 
     fn parseStatement(parser: *Parser) !*ast.Statement {
@@ -162,7 +154,7 @@ pub const Parser = struct {
     }
 
     fn parseSelectStatement(parser: *Parser) !*ast.SelectStatement {
-        _ = try parser.consumeKeyword(.select);
+        _ = try parser.consumeKeyword(.kw_select);
         const selectStatementSelect = try parser.alloc(ast.SelectStatement);
         selectStatementSelect.* = .{
             .select_kw = .{
@@ -178,6 +170,7 @@ pub const Parser = struct {
 };
 
 test "basic select test" {
+    const dialect = dial.Dialect.sqlserver;
     const input = "seLECt *, potato from table;";
     const expectEqualDeep = std.testing.expectEqualDeep;
     var testArena = std.heap.ArenaAllocator.init(std.testing.allocator);
@@ -202,7 +195,7 @@ test "basic select test" {
         .span = .{ .start = 0, .end = 5 },
     };
 
-    var parser = try Parser.init(std.testing.allocator, lex.Lexer.init(input), dial.Dialect.sqlserver);
+    var parser = try Parser.init(std.testing.allocator, lex.Lexer.init(input, dialect), dialect);
     defer parser.deinit();
     const actual = try parser.parse();
 

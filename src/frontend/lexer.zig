@@ -1,5 +1,6 @@
 const std = @import("std");
 const token = @import("token.zig");
+const Dialect = @import("dialect.zig").Dialect;
 const Span = token.Span;
 const Tag = token.Tag;
 const Token = token.Token;
@@ -10,12 +11,13 @@ pub const Error = error{
 
 pub const Lexer = struct {
     source: []const u8,
+    dialect: Dialect,
     read: usize = 0,
     current: usize = 0,
     char: u8 = 0,
 
-    pub fn init(source: []const u8) Lexer {
-        var lexer = Lexer{ .source = source };
+    pub fn init(source: []const u8, dialect: Dialect) Lexer {
+        var lexer = Lexer{ .source = source, .dialect = dialect };
         lexer.readChar();
         return lexer;
     }
@@ -28,7 +30,7 @@ pub const Lexer = struct {
         }
         const tok = switch (lexer.char) {
             ':' => blk: {
-                if (lexer.peek() == ':') {
+                if (lexer.peek() == ':' and lexer.dialect == .postgres) {
                     lexer.readChar();
                     break :blk lexer.makeToken("::", .double_colon, start);
                 } else {
@@ -155,6 +157,9 @@ pub const Lexer = struct {
             },
             'a'...'z', 'A'...'Z', '_' => blk: {
                 const slice = lexer.readIdentifier();
+                if (Tag.lookupKeyword(slice, lexer.dialect)) |kw| {
+                    break :blk lexer.makeToken(slice, kw, start);
+                }
                 break :blk lexer.makeToken(slice, .identifier, start);
             },
             else => Error.UnexpectedCharacter,
@@ -300,7 +305,7 @@ test "basic select test" {
     const expectEqualDeep = std.testing.expectEqualDeep;
     const tests = [_]Token{
         .{
-            .tag = .identifier,
+            .tag = .kw_select,
             .lexeme = "seLECt",
             .span = .{
                 .start = 0,
@@ -332,7 +337,7 @@ test "basic select test" {
             },
         },
         .{
-            .tag = .identifier,
+            .tag = .kw_from,
             .lexeme = "from",
             .span = .{
                 .start = 17,
@@ -365,7 +370,7 @@ test "basic select test" {
         },
     };
 
-    var lexer = Lexer.init(input);
+    var lexer = Lexer.init(input, .sqlserver);
 
     for (0..tests.len) |i| {
         const tok = lexer.next_token();
