@@ -254,8 +254,8 @@ pub const Tag = enum {
             .kw_as => "kw_as",
             .kw_asc => "kw_asc",
             .kw_desc => "kw_desc",
-            .kw_and_ => "kw_and_",
-            .kw_or_ => "kw_or_",
+            .kw_and => "kw_and_",
+            .kw_or => "kw_or_",
             .kw_order => "kw_order",
             .kw_group => "kw_group",
             .kw_by => "kw_by",
@@ -311,7 +311,7 @@ pub const Tag = enum {
             .kw_case => "kw_case",
             .kw_when => "kw_when",
             .kw_then => "kw_then",
-            .kw_else_ => "kw_else_",
+            .kw_else => "kw_else_",
             .kw_end => "kw_end",
             .kw_filter => "kw_filter",
             .kw_window => "kw_window",
@@ -328,7 +328,7 @@ pub const Tag = enum {
             .kw_jsonb => "kw_jsonb",
             .kw_serial => "kw_serial",
             .kw_bigserial => "kw_bigserial",
-            .kw_enum_ => "kw_enum_",
+            .kw_enum => "kw_enum_",
             .kw_replace => "kw_replace",
             .kw_conflict => "kw_conflict",
             .kw_abort => "kw_abort",
@@ -369,8 +369,8 @@ pub const Tag = enum {
         .{ "order", .kw_order },
         .{ "having", .kw_having },
         .{ "between", .kw_between },
-        .{ "and", .kw_and_ },
-        .{ "or", .kw_or_ },
+        .{ "and", .kw_and },
+        .{ "or", .kw_or },
         .{ "is", .kw_is },
         .{ "in", .kw_in },
         .{ "not", .kw_not },
@@ -390,7 +390,7 @@ pub const Tag = enum {
         .{ "case", .kw_case },
         .{ "when", .kw_when },
         .{ "then", .kw_then },
-        .{ "else", .kw_else_ },
+        .{ "else", .kw_else },
         .{ "end", .kw_end },
         .{ "asc", .kw_asc },
         .{ "desc", .kw_desc },
@@ -446,7 +446,7 @@ pub const Tag = enum {
         .{ "jsonb", .kw_jsonb },
         .{ "serial", .kw_serial },
         .{ "bigserial", .kw_bigserial },
-        .{ "enum", .kw_enum_ },
+        .{ "enum", .kw_enum },
     });
 
     pub const sqlite_keywords = std.StaticStringMap(Tag).initComptime(.{
@@ -473,4 +473,55 @@ pub const Tag = enum {
         .{ "bit", .kw_bit },
         .{ "datetime", .kw_datetime },
     });
+
+    pub fn getPrecedence(tag: Tag) Precedence {
+        return switch (tag) {
+            .tilde => .highest,
+
+            .asterisk, .forward_slash, .mod => .product,
+
+            .plus, .minus => .sum,
+
+            .equal,
+            .not_equal_bang,
+            .not_equal_arrow,
+            .less_than,
+            .less_than_equal,
+            .greater_than,
+            .greater_than_equal,
+            => .comparison,
+
+            .kw_not => .not,
+            .kw_and => .and_,
+            .kw_all,
+            .kw_any,
+            .kw_between,
+            .kw_in,
+            .kw_like,
+            .kw_or,
+            .kw_some,
+            .plus_equal,
+            .minus_equal,
+            .multiply_equal,
+            .divide_equal,
+            .mod_equal,
+            .ampersand_equal,
+            .pipe_equal,
+            .caret_equal,
+            => .other_logicals,
+            else => .lowest,
+        };
+    }
+};
+
+pub const Precedence = enum(u4) {
+    lowest,
+    assignment,
+    other_logicals,
+    and_,
+    not,
+    comparison,
+    sum,
+    product,
+    highest,
 };
