@@ -167,6 +167,90 @@ pub const Parser = struct {
 
         return selectStatementSelect;
     }
+
+    fn currentSpan(parser: *Parser) ast.Span {
+        return parser.current_token.span;
+    }
+
+    fn currentPrecedence(parser: *Parser) tok.Precedence {
+        return switch (parser.current_token.tag) {
+            .identifier => |ident| blk: {
+                const maybeKw = dial.lookupKeyword(ident, parser.dialect);
+                if (maybeKw) |kw| {
+                    break :blk dial.precedenceOf(kw);
+                } else {
+                    break :blk .lowest;
+                }
+            },
+            else => |tag| tok.precedenceOf(tag),
+        };
+    }
+
+    fn parseExpression(parser: *Parser, precedence: tok.Precedence) !*ast.Expression {
+        var left_expr = try parser.parsePrefixExpression();
+        while (precedence < parser.currentPrecedence()) {
+            left_expr = try parser.parseInfixExpression(left_expr);
+        }
+
+        return left_expr;
+    }
+
+    fn parsePrefixExpression(parser: *Parser) !*ast.Expression {
+        const start_span = parser.currentSpan();
+        const expr = try parser.alloc(ast.Expression);
+        expr.* = switch (parser.current_token.tag) {
+            .identifier,
+            .quoted_identifier,
+            .local_variable,
+            .string_literal,
+            .number_literal,
+            .asterisk,
+            => blk: {
+                const newExpr = switch (parser.current_token.tag) {
+                    .identifier => ast.Expression{
+                        .identifier = .{
+                            .normal = .{ .value = parser.current_token.lexeme, .span = ast.Span.merge(start_span, parser.currentSpan()) },
+                        },
+                    },
+                    .quoted_identifier => ast.Expression{
+                        .identifier = .{
+                            .quoted = .{ .value = parser.current_token.lexeme, .span = ast.Span.merge(start_span, parser.currentSpan()) },
+                        },
+                    },
+                    .local_variable => ast.Expression{
+                        .identifier = .{
+                            .local_variable = .{ .value = parser.current_token.lexeme, .span = ast.Span.merge(start_span, parser.currentSpan()) },
+                        },
+                    },
+                    .string_literal => ast.Expression{
+                        .literal = .{
+                            .string = .{ .value = parser.current_token.lexeme, .span = ast.Span.merge(start_span, parser.currentSpan()) },
+                        },
+                    },
+                    .number_literal => ast.Expression{
+                        .literal = .{
+                            .number = .{ .value = parser.current_token.lexeme, .span = ast.Span.merge(start_span, parser.currentSpan()) },
+                        },
+                    },
+                    .bool_literal => ast.Expression{
+                        .literal = .{
+                            .number = .{ .value = parser.current_token.lexeme, .span = ast.Span.merge(start_span, parser.currentSpan()) },
+                        },
+                    },
+                    // .asterisk,
+
+                };
+                _ = newExpr;
+                break :blk;
+            },
+        };
+        return expr;
+    }
+
+    fn parseInfixExpression(parser: *Parser, expr: *ast.Expression) !*ast.Expression {
+        _ = parser;
+        _ = expr;
+    }
 };
 
 test "basic select test" {
